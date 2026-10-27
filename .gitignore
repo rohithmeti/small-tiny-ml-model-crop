@@ -1,0 +1,12 @@
+# the private Python environment - every computer builds its own (python setup_env.py)
+.venv/
+# Python caches
+__pycache__/
+*.pyc
+# office / editor lock files (e.g. LibreOffice leaves one next to an open CSV; it contains your username and computer name)
+.~lock.*
+~$*
+*.swp
+.DS_Store
+# local logs
+logs/

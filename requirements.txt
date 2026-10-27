@@ -1,0 +1,14 @@
+# Everything the project needs EXCEPT PyTorch (setup_env.py installs the CPU build of torch separately).
+# Pinned for Python 3.10 - 3.13 on Windows and Linux (wheels checked on PyPI).
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.3.3
+scikit-learn==1.7.2
+joblib==1.6.0
+lightgbm==4.7.0
+xgboost-cpu==3.2.0
+matplotlib==3.10.9
+onnx==1.23.2
+onnxruntime==1.23.2
+skl2onnx==1.20.0
+pyserial==3.5

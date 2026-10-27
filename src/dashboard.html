@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crop advisor</title>
+<link rel="icon" href="data:,">
+<style>
+/* Colour roles. Light and dark are separate selected steps of the same hues (not an automatic flip). */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;  --surface: #fcfcfb;
+  --ink: #0b0b0b;  --ink-2: #52514e;  --muted: #898781;
+  --grid: #e1e0d9;  --axis: #c3c2b7;  --border: rgba(11,11,11,.10);
+  --accent: #2a78d6;  --track: #cde2fb;  --wash: rgba(42,120,214,.10);
+  --good: #0ca30c;  --warning: #fab219;  --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;  --surface: #1a1a19;
+    --ink: #f0efec;  --ink-2: #c3c2b7;
+    --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,.10);
+    --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;  --surface: #1a1a19;
+  --ink: #f0efec;  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,.10);
+  --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; transition: opacity .2s; }
+body.offline .wrap { opacity: .55; }
+h1, h2, h3, p { margin: 0; }
+.small { font-size: .85rem; color: var(--ink-2); }
+
+/* header */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo { width: 42px; height: 42px; border-radius: 12px; background: var(--wash); color: var(--accent); display: grid; place-items: center; }
+h1 { font-size: 1.25rem; font-weight: 650; letter-spacing: -.01em; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface); font-size: .875rem; color: var(--ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.live .dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+
+/* cards + layout */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; }
+.card h3, .section-title { font-size: .95rem; font-weight: 600; color: var(--ink); }
+.grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+.grid2 > * { min-width: 0; }   /* lets the table scroll inside its card instead of widening the page */
+.section-title { margin: 8px 2px 10px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.section-title .small { font-weight: 400; }
+
+/* hero figure: the recommended crop */
+.emoji { width: 56px; height: 56px; border-radius: 16px; background: var(--wash); display: grid; place-items: center; font-size: 30px; margin: 12px 0; }
+.hero-crop { font-size: clamp(3rem, 8vw, 4.5rem); line-height: 1.02; font-weight: 650; letter-spacing: -.02em; overflow-wrap: anywhere; margin-bottom: 20px; }
+.meter { height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.meter > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .5s; }
+.conf-row { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.conf-num { font-size: 1.6rem; font-weight: 650; }
+.hero-meta { margin-top: 14px; display: grid; gap: 4px; }
+
+/* best matches: one series, thin bars, value at the tip */
+.bar-row { display: grid; grid-template-columns: 104px 1fr; align-items: center; gap: 10px; padding: 8px 0; }
+.bar-name { color: var(--ink-2); font-size: .9rem; white-space: nowrap; }
+.bar-row.first .bar-name { color: var(--ink); font-weight: 600; }
+.bar-track { display: flex; align-items: center; gap: 8px; border-left: 1px solid var(--axis); min-height: 16px; }
+.bar { flex: none; height: 14px; width: calc((100% - 52px) * var(--p, 0)); min-width: 2px; background: var(--muted);
+  border-radius: 0 4px 4px 0; transition: width .4s, opacity .15s; }
+.bar-row.first .bar { background: var(--accent); }
+.bar-row:hover .bar { opacity: .75; }
+.bar-val { flex: none; font-size: .85rem; color: var(--ink-2); }
+.bar-row.first .bar-val { color: var(--ink); font-weight: 600; }
+.empty { color: var(--ink-2); font-size: .9rem; padding: 8px 0; }
+
+/* sensor tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+@media (min-width: 1040px) { .tiles { grid-template-columns: repeat(7, 1fr); } }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px 12px; }
+.tile-label { font-size: .8rem; color: var(--ink-2); white-space: nowrap; }
+.tile-value { font-size: 2rem; font-weight: 650; line-height: 1.1; margin: 4px 0 12px; letter-spacing: -.01em; }
+.unit { font-size: .9rem; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+.range { position: relative; height: 6px; border-radius: 99px; background: var(--track); margin: 2px 6px 4px; }
+.pos { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--surface); transform: translate(-50%, -50%); transition: left .5s; }
+.tile.out .pos { background: var(--warning); }
+.range-ends { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-bottom: 8px; }
+.spark { display: block; width: 100%; height: auto; overflow: visible; outline-offset: 4px; }
+.spark-line { stroke: var(--muted); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; fill: none; vector-effect: non-scaling-stroke; }
+.spark-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.cross { stroke: var(--axis); stroke-width: 1; opacity: 0; vector-effect: non-scaling-stroke; }
+.hover-dot { fill: var(--ink-2); stroke: var(--surface); stroke-width: 2; opacity: 0; vector-effect: non-scaling-stroke; }
+.flag { display: none; align-items: center; gap: 6px; font-size: .78rem; color: var(--ink); margin-top: 8px; }
+.tile.out .flag { display: flex; }
+
+/* table + session */
+.stack { display: grid; gap: 16px; }
+.tablewrap { overflow-x: auto; margin-top: 8px; scrollbar-color: var(--axis) transparent; }
+.session { display: grid; gap: 8px; }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 18px; }
+.tab-btn { font: inherit; font-size: .9rem; border: 0; background: transparent; color: var(--ink-2); padding: 7px 18px; border-radius: 9px; cursor: pointer; }
+.tab-btn:hover { color: var(--ink); }
+.tab-btn[aria-selected="true"] { background: var(--wash); color: var(--ink); font-weight: 600; }
+.btn, select, .num-in { font: inherit; font-size: .85rem; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 10px; padding: 7px 12px; }
+.btn { cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--wash); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.small { padding: 3px 10px; font-size: .8rem; }
+:is(.btn, select, .num-in, .tab-btn, input[type=range]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.spacer { flex: 1; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+.lines { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.lines li { display: grid; grid-template-columns: 16px 62px 1fr; gap: 8px; align-items: start; font-size: .8rem; }
+.lines .mono { word-break: break-all; }
+.lines .why { display: block; color: var(--ink-2); font-family: system-ui, sans-serif; }
+.hint-box { border-left: 3px solid var(--accent); padding: 4px 12px; margin: 12px 0; color: var(--ink-2); font-size: .9rem; }
+td.mono, th.mono { font-size: .78rem; text-align: left; }
+.srow { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+.srow:last-child { border-bottom: 0; }
+.srow-top { display: flex; align-items: center; gap: 8px; }
+.srow-top label { font-size: .9rem; font-weight: 600; }
+.num-in { width: 92px; text-align: right; font-variant-numeric: tabular-nums; }
+.srow-top .small { min-width: 24px; }
+.range-wrap { position: relative; margin: 8px 0 2px; }
+.range-wrap .band { position: absolute; left: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 99px; background: var(--track); pointer-events: none; }
+.range-wrap input { position: relative; display: block; width: 100%; height: 20px; margin: 0; accent-color: var(--accent); background: transparent; }
+.srow-bot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.out-flag { color: var(--ink); font-weight: 600; }
+.out-flag::before { content: "\26A0\FE0E "; color: var(--warning); }
+.pg-name { font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1.05; font-weight: 650; letter-spacing: -.02em; overflow-wrap: anywhere; margin: 0 0 14px; }
+.line-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding: 10px 12px; background: var(--page); border: 1px solid var(--border); border-radius: 10px; }
+.line-box code { flex: 1; min-width: 0; font-size: .8rem; word-break: break-all; }
+.changes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: .88rem; }
+.changes li::before { content: "\2022  "; color: var(--accent); }
+.pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--ink-2); text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+th.l, td.l { text-align: left; }
+.kvs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin: 14px 0 6px; }
+.kv-val { font-size: 1.5rem; font-weight: 650; line-height: 1.15; display: flex; align-items: center; gap: 8px; }
+.rej { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: .85rem; }
+.rej li { display: flex; gap: 8px; align-items: center; }
+.rej svg, .kv-val svg { flex: none; }
+footer { margin-top: 18px; text-align: center; }
+
+/* tooltip */
+#tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--page); border-radius: 8px;
+  padding: 6px 10px; font-size: .8rem; display: grid; gap: 1px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+#tip strong { font-size: .95rem; }
+#tip span { opacity: .8; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20C5 11 10 5 20 5c0 10-6 15-14 15"/><path d="M5 20c2-5 5-8 9-10"/></svg>
+      </div>
+      <div><h1>Crop advisor</h1><p class="small">Live recommendation from soil and weather sensors</p></div>
+    </div>
+    <div id="status" class="pill" role="status"><i class="dot"></i><span>Connecting</span></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button class="tab-btn" role="tab" id="btn-live" data-tab="live" aria-selected="true">Live</button>
+    <button class="tab-btn" role="tab" id="btn-data" data-tab="data" aria-selected="false">Data</button>
+    <button class="tab-btn" role="tab" id="btn-playground" data-tab="playground" aria-selected="false">Playground</button>
+  </nav>
+
+<div id="tab-live" role="tabpanel" aria-labelledby="btn-live">
+  <section class="grid2">
+    <article class="card" aria-live="polite">
+      <p class="small">Recommended crop</p>
+      <div id="emoji" class="emoji" aria-hidden="true"></div>
+      <h2 id="crop" class="hero-crop">Waiting for data</h2>
+      <div class="meter" role="meter" aria-label="Confidence score" aria-valuemin="0" aria-valuemax="100" id="meter"><i id="conf-fill"></i></div>
+      <div class="conf-row"><span id="conf" class="conf-num">--</span><span class="small">confidence score, averaged over the last 5 readings</span></div>
+      <div class="hero-meta"><p id="truth" class="small" hidden></p><p id="note" class="small" hidden></p><p id="hint" class="small" hidden></p></div>
+    </article>
+    <article class="card">
+      <h3>Best matches</h3>
+      <div id="bars"></div>
+      <p class="small">These are scores, not exact chances. Trust the order.</p>
+    </article>
+  </section>
+
+  <h3 class="section-title">Sensors <span class="small">latest reading &middot; dot shows where it sits in the training data range &middot; line shows the last 30 readings</span></h3>
+  <section id="tiles" class="tiles"></section>
+
+  <section class="stack">
+    <article class="card">
+      <h3>Recent readings</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th class="l">Time</th><th>N</th><th>P</th><th>K</th><th>Temp &deg;C</th><th>Humidity %</th><th>pH</th><th>Rain mm</th><th class="l">Top match</th><th>Score</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid2">
+    <article class="card">
+      <h3>Incoming data</h3>
+      <p class="small">The text lines exactly as the sensor sent them. Each one is checked, then given to the model.</p>
+      <ul id="lines" class="lines"></ul>
+    </article>
+    <article class="card">
+      <h3>Session</h3>
+      <div class="session">
+      <div class="kvs">
+        <div><div class="kv-val" id="used">0</div><p class="small">Readings used</p></div>
+        <div><div class="kv-val"><span id="rejected">0</span><span id="rej-icon"></span></div><p class="small">Readings rejected</p></div>
+        <div><div class="kv-val" id="ms">--</div><p class="small">Model time per reading</p></div>
+        <div><div class="kv-val" id="acc">--</div><p class="small">Correct vs simulator</p></div>
+      </div>
+      <div><p class="small">Why the last readings were rejected</p>
+      <ul id="rej" class="rej"></ul></div>
+      </div>
+    </article>
+  </section>
+</div>
+
+<div id="tab-data" role="tabpanel" aria-labelledby="btn-data" hidden>
+  <section class="stack">
+    <article class="card">
+      <h3>The data the model learned from</h3>
+      <p class="hint-box">2,200 real field records, 100 for each of 22 crops. Every row is what a sensor would send as one text line. Pick a crop to see its typical values, or press <b>Try</b> to load a row into the Playground.</p>
+      <div class="controls"><label class="small" for="ds-crop">Show</label><select id="ds-crop" aria-label="Crop"><option value="">All crops</option></select></div>
+      <h3 id="ds-sum-title" class="small" style="font-weight:600;color:var(--ink)"></h3>
+      <div class="tablewrap"><table><thead><tr><th class="l">Input</th><th>Average</th><th>Spread (+-)</th><th>Lowest</th><th>Highest</th></tr></thead><tbody id="ds-sum"></tbody></table></div>
+    </article>
+    <article class="card">
+      <h3>Rows</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="l">Row</th><th>N</th><th>P</th><th>K</th><th>Temp &deg;C</th><th>Humidity %</th><th>pH</th><th>Rain mm</th><th class="l">Crop</th><th class="mono">Text line (as a sensor sends it)</th><th></th></tr></thead>
+        <tbody id="ds-rows"></tbody>
+      </table></div>
+      <div class="pager"><span id="ds-pager" class="small"></span><button class="btn" id="ds-prev">Previous</button><button class="btn" id="ds-next">Next</button></div>
+      <p id="ds-msg" class="small"></p>
+    </article>
+  </section>
+</div>
+
+<div id="tab-playground" role="tabpanel" aria-labelledby="btn-playground" hidden>
+  <section class="grid2">
+    <article class="card">
+      <h3>Try your own values</h3>
+      <p class="hint-box">Move a slider or type a number and the model answers at once. Try raising N and K and watch the recommendation change. Nothing here affects the live view.</p>
+      <div class="controls">
+        <span class="small">Start from</span>
+        <button class="btn" id="pg-sensor">Latest sensor reading</button>
+        <select id="pg-crop" aria-label="Example crop"><option value="">any crop</option></select>
+        <button class="btn" id="pg-random">Random dataset example</button>
+        <button class="btn" id="pg-reset">Reset</button>
+      </div>
+      <p id="pg-from" class="small"></p>
+      <div id="pg-sliders"></div>
+    </article>
+    <article class="card" aria-live="polite">
+      <p class="small">Recommended crop for these values</p>
+      <div id="pg-emoji" class="emoji" aria-hidden="true"></div>
+      <h2 id="pg-name" class="pg-name">&nbsp;</h2>
+      <div class="meter" role="meter" aria-label="Confidence score" aria-valuemin="0" aria-valuemax="100" id="pg-meter"><i id="pg-fill"></i></div>
+      <div class="conf-row"><span id="pg-conf" class="conf-num">--</span><span class="small">confidence score</span></div>
+      <div id="pg-bars" style="margin-top:12px"></div>
+      <h3 class="small" style="font-weight:600;color:var(--ink);margin-top:14px">What you changed</h3>
+      <p id="pg-rec" class="small"></p>
+      <ul id="pg-changes" class="changes"></ul>
+      <div class="line-box"><code id="pg-line" class="mono"></code><button class="btn small" id="pg-copy">Copy</button></div>
+      <p id="pg-note" class="small" hidden></p>
+    </article>
+  </section>
+</div>
+
+  <footer class="small" id="foot"></footer>
+</main>
+<div id="tip" role="tooltip" hidden></div>
+<noscript><p style="padding:16px">This dashboard needs JavaScript.</p></noscript>
+
+<script>
+"use strict";
+// optional: dashboard.html?theme=light or ?theme=dark (default follows the computer's setting)
+const themeArg = new URLSearchParams(location.search).get("theme");
+if (themeArg === "light" || themeArg === "dark") document.documentElement.dataset.theme = themeArg;
+const INITIAL = /*INITIAL_STATE*/null;
+const NAMES = {blackgram: "Black gram", kidneybeans: "Kidney beans", mothbeans: "Moth beans", mungbean: "Mung bean", pigeonpeas: "Pigeon peas"};
+const MODELS = {NaiveBayes: "Naive Bayes", SVM: "SVM", RandomForest: "Random forest", MLP: "Neural network"};
+const EMOJI = {apple: "\u{1F34E}", banana: "\u{1F34C}", coconut: "\u{1F965}", coffee: "☕", grapes: "\u{1F347}", maize: "\u{1F33D}",
+  mango: "\u{1F96D}", muskmelon: "\u{1F348}", orange: "\u{1F34A}", rice: "\u{1F33E}", watermelon: "\u{1F349}"};
+const SENSORS = [
+  {label: "Nitrogen (N)", unit: "", dec: 0, step: 1}, {label: "Phosphorus (P)", unit: "", dec: 0, step: 1}, {label: "Potassium (K)", unit: "", dec: 0, step: 1},
+  {label: "Temperature", unit: "\u00b0C", dec: 1, step: 0.1}, {label: "Humidity", unit: "%", dec: 1, step: 0.1}, {label: "Soil pH", unit: "", dec: 2, step: 0.01},
+  {label: "Rainfall", unit: "mm", dec: 1, step: 0.5}];
+const W = 160, H = 36, PAD = 6;   // sparkline drawing box
+
+const $ = id => document.getElementById(id);
+const nice = c => NAMES[c] || (c.charAt(0).toUpperCase() + c.slice(1));
+const pct = p => (p < 0.005 ? "<1%" : Math.round(p * 100) + "%");
+const fmt = (v, d) => Number(v).toFixed(d);
+
+function h(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function svg(tag, attrs) { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function warnIcon() {   // status icons always travel with a text label
+  const s = svg("svg", {viewBox: "0 0 16 16", width: 14, height: 14, "aria-hidden": "true"});
+  s.append(svg("path", {d: "M8 1.5 15 14H1z", fill: "var(--warning)", stroke: "var(--ink-2)", "stroke-width": 1, "stroke-linejoin": "round"}),
+           svg("path", {d: "M8 6v4M8 11.6v.4", stroke: "var(--ink)", "stroke-width": 1.4, "stroke-linecap": "round"}));
+  return s;
+}
+function critIcon() {
+  const s = svg("svg", {viewBox: "0 0 16 16", width: 16, height: 16, "aria-hidden": "true"});
+  s.append(svg("circle", {cx: 8, cy: 8, r: 7, fill: "var(--critical)"}),
+           svg("path", {d: "M5.5 5.5l5 5m0-5l-5 5", stroke: "#fff", "stroke-width": 1.6, "stroke-linecap": "round"}));
+  return s;
+}
+
+/* ---------- tooltip ---------- */
+const tip = $("tip");
+function showTip(x, y, strong, label) {
+  tip.replaceChildren(h("strong", null, strong), h("span", null, label));
+  tip.hidden = false;
+  tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, Math.max(8, x - tip.offsetWidth / 2)) + "px";
+  tip.style.top = Math.max(8, y - tip.offsetHeight - 10) + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+
+/* ---------- build the static parts once ---------- */
+let tiles = null, barRows = null;
+
+function buildTiles() {
+  const box = $("tiles"); box.replaceChildren(); tiles = [];
+  SENSORS.forEach((d, i) => {
+    const el = h("div", "tile"), n = h("span", null, "--");
+    const val = h("div", "tile-value"); val.append(n, h("span", "unit", d.unit));
+    const pos = h("i", "pos"), range = h("div", "range"); range.append(pos);
+    const lo = h("span"), hi = h("span"), ends = h("div", "range-ends"); ends.append(lo, hi);
+    const sp = svg("svg", {class: "spark", viewBox: `0 0 ${W} ${H}`, tabindex: "0", role: "img"});
+    const line = svg("polyline", {class: "spark-line"}), cross = svg("line", {class: "cross", y1: 0, y2: H});
+    const hov = svg("circle", {class: "hover-dot", r: 4.5}), dot = svg("circle", {class: "spark-dot", r: 4.5});
+    const hit = svg("rect", {x: 0, y: -6, width: W, height: H + 12, fill: "transparent"});
+    sp.append(line, cross, hov, dot, hit);
+    const flag = h("div", "flag"); flag.append(warnIcon(), h("span", null, "Outside training range"));
+    el.append(h("div", "tile-label", d.label), val, range, ends, sp, flag); box.append(el);
+    const t = {el, n, pos, lo, hi, sp, line, cross, hov, dot, series: [], pts: []};
+    const markAt = k => {
+      const p = t.pts[k]; if (!p) return;
+      t.cross.setAttribute("x1", p.x); t.cross.setAttribute("x2", p.x); t.cross.style.opacity = 1;
+      t.hov.setAttribute("cx", p.x); t.hov.setAttribute("cy", p.y); t.hov.style.opacity = 1;
+    };
+    const clear = () => { t.cross.style.opacity = 0; t.hov.style.opacity = 0; hideTip(); };
+    const valueText = k => fmt(t.series[k], d.dec) + (d.unit ? " " + d.unit : "");
+    hit.addEventListener("pointermove", e => {
+      const m = t.series.length; if (!m) return;
+      const r = sp.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      const k = m > 1 ? Math.round(f * (m - 1)) : 0;
+      markAt(k); showTip(e.clientX, r.top, valueText(k), k === m - 1 ? "latest reading" : (m - 1 - k) + " readings ago");
+    });
+    hit.addEventListener("pointerleave", clear);
+    sp.addEventListener("focus", () => {
+      const m = t.series.length; if (!m) return;
+      const r = sp.getBoundingClientRect(); markAt(m - 1); showTip(r.left + r.width / 2, r.top, valueText(m - 1), "latest reading");
+    });
+    sp.addEventListener("blur", clear);
+    tiles.push(t);
+  });
+}
+
+function makeBars(box, n) {   // n rows of: crop name | thin bar with the score at its tip
+  box.replaceChildren(); const rows = [];
+  for (let i = 0; i < n; i++) {
+    const row = h("div", "bar-row" + (i === 0 ? " first" : "")), name = h("div", "bar-name");
+    const track = h("div", "bar-track"), bar = h("i", "bar"), val = h("span", "bar-val");
+    track.append(bar, val); row.append(name, track); box.append(row);
+    const r = {row, name, bar, val, crop: "", p: 0};
+    row.addEventListener("pointermove", e => showTip(e.clientX, e.clientY, nice(r.crop), "score " + pct(r.p)));
+    row.addEventListener("pointerleave", hideTip);
+    rows.push(r);
+  }
+  return rows;
+}
+function fillBars(rows, top) {
+  rows.forEach((r, i) => {
+    const t = top[i]; r.row.hidden = !t; if (!t) return;
+    r.crop = t.crop; r.p = t.p; r.name.textContent = nice(t.crop); r.bar.style.setProperty("--p", t.p.toFixed(4)); r.val.textContent = pct(t.p);
+  });
+}
+
+/* ---------- draw ---------- */
+function drawSpark(t) {
+  const s = t.series, m = s.length;
+  if (!m) { t.line.setAttribute("points", ""); t.dot.style.display = "none"; t.pts = []; return; }
+  const lo = Math.min(...s), hi = Math.max(...s), span = hi - lo;
+  t.pts = s.map((v, k) => ({
+    x: m > 1 ? PAD + k * (W - 2 * PAD) / (m - 1) : W / 2,
+    y: span === 0 ? H / 2 : H - PAD - (v - lo) / span * (H - 2 * PAD)}));
+  t.line.setAttribute("points", t.pts.map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" "));
+  const last = t.pts[m - 1];
+  t.dot.style.display = ""; t.dot.setAttribute("cx", last.x); t.dot.setAttribute("cy", last.y);
+}
+
+function renderStatus(s) {
+  const el = $("status"); el.className = "pill"; el.replaceChildren();
+  if (s.age === null) { el.append(h("i", "dot"), h("span", null, s.seen ? "Waiting for a valid reading" : "Waiting for sensor")); return; }
+  if (s.age < 5) { el.classList.add("live"); el.append(h("i", "dot"), h("span", null, "Live" + (s.source === "demo" ? " · demo sensor" : ""))); return; }
+  el.append(warnIcon(), h("span", null, "No data for " + Math.round(s.age) + " s"));
+}
+
+function renderHero(s) {
+  const L = s.latest, hint = $("hint"), note = $("note"), truth = $("truth");
+  [hint, note, truth].forEach(e => { e.hidden = true; });
+  if (!L) {
+    $("crop").textContent = s.seen ? "Waiting for a valid reading" : "Waiting for data";
+    $("emoji").textContent = "⏳"; $("conf").textContent = "--"; $("conf-fill").style.width = "0%";
+    if (s.source !== "demo") { hint.textContent = "Listening on " + s.source + " for lines like N=90,P=42,K=43,T=21.5,H=80.1,PH=6.5,R=202.9"; hint.hidden = false; }
+    return;
+  }
+  $("crop").textContent = nice(L.crop);
+  $("emoji").textContent = EMOJI[L.crop] || "\u{1F331}";
+  $("conf").textContent = pct(L.confidence);
+  $("conf-fill").style.width = Math.round(L.confidence * 100) + "%";
+  $("meter").setAttribute("aria-valuenow", Math.round(L.confidence * 100));
+  if (L.truth) { truth.textContent = "Demo sensor is simulating: " + nice(L.truth) + (L.truth === L.crop ? "  ✓ match" : "  · still adjusting"); truth.hidden = false; }
+  if (L.note) { note.textContent = "Note: " + L.note + " (answer is less certain)"; note.hidden = false; }
+}
+
+function renderBars(s) {
+  if (!barRows) barRows = makeBars($("bars"), 5);
+  fillBars(barRows, s.latest ? s.latest.top : []);
+}
+
+function renderTiles(s) {
+  if (!tiles) buildTiles();
+  const L = s.latest, hist = s.history.slice(-30);
+  SENSORS.forEach((d, i) => {
+    const t = tiles[i], lo = s.range_lo[i], hi = s.range_hi[i], span = hi - lo;
+    t.lo.textContent = fmt(lo, d.dec); t.hi.textContent = fmt(hi, d.dec);
+    t.series = hist.map(r => r[i]);
+    if (!L) { t.n.textContent = "--"; t.pos.style.visibility = "hidden"; t.el.classList.remove("out"); drawSpark(t); return; }
+    const v = L.values[i];
+    t.n.textContent = fmt(v, d.dec);
+    t.pos.style.visibility = "visible"; t.pos.style.left = Math.min(1, Math.max(0, (v - lo) / span)) * 100 + "%";
+    t.el.classList.toggle("out", v < lo - 0.1 * span || v > hi + 0.1 * span);
+    drawSpark(t);
+    t.sp.setAttribute("aria-label", `${d.label}: last ${t.series.length} readings, latest ${fmt(v, d.dec)} ${d.unit}`);
+  });
+}
+
+function renderTable(s) {
+  const body = $("rows"); body.replaceChildren();
+  if (!s.recent.length) { const tr = h("tr"), td = h("td", "l", "No readings yet"); td.colSpan = 10; tr.append(td); body.append(tr); return; }
+  s.recent.forEach(r => {
+    const tr = h("tr"); tr.append(h("td", "l", r.t));
+    r.values.forEach((v, i) => tr.append(h("td", null, fmt(v, SENSORS[i].dec))));
+    tr.append(h("td", "l", nice(r.crop)), h("td", null, pct(r.p))); body.append(tr);
+  });
+}
+
+function okIcon() {
+  const s = svg("svg", {viewBox: "0 0 16 16", width: 16, height: 16, "aria-hidden": "true"});
+  s.append(svg("circle", {cx: 8, cy: 8, r: 7, fill: "var(--good)"}),
+           svg("path", {d: "M4.8 8.4l2.2 2.2 4.2-4.8", stroke: "#fff", "stroke-width": 1.6, "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none"}));
+  return s;
+}
+
+function renderLines(s) {
+  const ul = $("lines"); ul.replaceChildren();
+  if (!s.lines.length) { ul.append(h("li", null, "No lines yet")); return; }
+  s.lines.forEach(r => {
+    const li = h("li"), body = h("div");
+    body.append(h("span", "mono", r.line));
+    if (!r.ok) body.append(h("span", "why", "Rejected: " + r.why));
+    li.append(r.ok ? okIcon() : critIcon(), h("span", "small", r.t), body); ul.append(li);
+  });
+}
+
+function renderSession(s) {
+  $("used").textContent = s.used;
+  $("rejected").textContent = s.rejected;
+  $("rej-icon").replaceChildren(...(s.rejected ? [critIcon()] : []));
+  $("ms").textContent = s.used ? (s.ms_sum / s.used).toFixed(2) + " ms" : "--";
+  $("acc").textContent = s.known ? s.right + " / " + s.known : "n/a";
+  const ul = $("rej"); ul.replaceChildren();
+  if (!s.rejections.length) ul.append(h("li", null, "None so far"));
+  s.rejections.forEach(r => { const li = h("li"); li.append(critIcon(), h("span", null, "#" + r.n + " " + r.t + " – " + r.why)); ul.append(li); });
+  $("foot").textContent = "Source: " + s.source + "  ·  Model: " + (MODELS[s.model] || s.model) + (s.noise_aware ? " (noise-aware)" : "") +
+    "  ·  Runs on this laptop's CPU, nothing leaves your computer";
+}
+
+let lastState = null;
+function render(s) { lastState = s; renderStatus(s); renderHero(s); renderBars(s); renderTiles(s); renderTable(s); renderLines(s); renderSession(s); }
+
+/* ---------- tabs ---------- */
+const TABS = ["live", "data", "playground"];
+function showTab(name) {
+  if (!TABS.includes(name)) name = "live";
+  TABS.forEach(t => { $("tab-" + t).hidden = t !== name; $("btn-" + t).setAttribute("aria-selected", String(t === name)); });
+  try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// pages */ }
+  hideTip();
+  if (name === "data" && !ds.loaded) dsLoad();
+  if (name === "playground") pgOpen();
+}
+document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* ---------- Data tab: browse the training file ---------- */
+const ds = {crop: "", page: 0, size: 20, total: 0, loaded: false};
+async function dsLoad() {
+  try {
+    const r = await fetch("/api/dataset?crop=" + encodeURIComponent(ds.crop) + "&page=" + ds.page + "&size=" + ds.size, {cache: "no-store"});
+    if (!r.ok) throw new Error("http " + r.status);
+    const d = await r.json();
+    if (!ds.loaded) {
+      d.crops.forEach(c => { const o = h("option", null, nice(c)); o.value = c; $("ds-crop").append(o); $("pg-crop").append(o.cloneNode(true)); });
+      ds.loaded = true;
+    }
+    ds.page = d.page; ds.total = d.total; dsRender(d); $("ds-msg").textContent = "";
+  } catch (e) { $("ds-msg").textContent = "Could not load the dataset from the laptop program."; }
+}
+function dsRender(d) {
+  $("ds-sum-title").textContent = (d.crop ? "Typical values for " + nice(d.crop) : "All crops together") + " (" + d.total.toLocaleString() + " rows)";
+  const sum = $("ds-sum"); sum.replaceChildren();
+  d.summary.forEach((f, i) => {
+    const tr = h("tr"), dec = SENSORS[i].dec;
+    tr.append(h("td", "l", SENSORS[i].label + (SENSORS[i].unit ? " (" + SENSORS[i].unit + ")" : "")), h("td", null, fmt(f.mean, dec)), h("td", null, fmt(f.std, dec)),
+              h("td", null, fmt(f.min, dec)), h("td", null, fmt(f.max, dec)));
+    sum.append(tr);
+  });
+  const body = $("ds-rows"); body.replaceChildren();
+  d.rows.forEach(r => {
+    const tr = h("tr"); tr.append(h("td", "l", String(r.row)));
+    r.values.forEach((v, i) => tr.append(h("td", null, fmt(v, SENSORS[i].dec))));
+    const go = h("button", "btn small", "Try"); go.title = "Load this row into the Playground";
+    go.addEventListener("click", () => { pgLoad(r.values, "dataset row " + r.row + " (" + nice(r.crop) + ")"); showTab("playground"); });
+    const act = h("td"); act.append(go);
+    tr.append(h("td", "l", nice(r.crop)), h("td", "mono", r.line), act); body.append(tr);
+  });
+  const from = d.total ? d.page * d.size + 1 : 0, to = Math.min(d.total, (d.page + 1) * d.size);
+  $("ds-pager").textContent = "Rows " + from.toLocaleString() + " to " + to.toLocaleString() + " of " + d.total.toLocaleString();
+  $("ds-prev").disabled = d.page <= 0; $("ds-next").disabled = to >= d.total;
+}
+$("ds-crop").addEventListener("change", e => { ds.crop = e.target.value; ds.page = 0; dsLoad(); });
+$("ds-prev").addEventListener("click", () => { ds.page = Math.max(0, ds.page - 1); dsLoad(); });
+$("ds-next").addEventListener("click", () => { ds.page += 1; dsLoad(); });
+
+/* ---------- Playground: change values, watch the answer ---------- */
+const pg = {rows: [], values: null, base: null, baseRes: null, wantBase: false, seq: 0, timer: null, bars: null, built: false};
+const QUERY_KEYS = ["N", "P", "K", "T", "H", "PH", "R"];
+
+function pgBuild(s) {
+  const box = $("pg-sliders"); box.replaceChildren(); pg.rows = []; pg.values = new Array(7).fill(0);
+  SENSORS.forEach((d, i) => {
+    const lo = s.limit_lo[i], hi = s.limit_hi[i], tlo = s.range_lo[i], thi = s.range_hi[i];
+    const row = h("div", "srow"), top = h("div", "srow-top");
+    const label = h("label", null, d.label); label.htmlFor = "pg-range-" + i;
+    const num = h("input", "num-in"); num.type = "number"; num.min = lo; num.max = hi; num.step = d.step; num.setAttribute("aria-label", d.label + " value");
+    top.append(label, h("span", "spacer"), num, h("span", "small", d.unit));
+    const range = h("input"); range.type = "range"; range.id = "pg-range-" + i; range.min = lo; range.max = hi; range.step = d.step;
+    const band = h("i", "band"); band.style.left = ((tlo - lo) / (hi - lo) * 100) + "%"; band.style.width = ((thi - tlo) / (hi - lo) * 100) + "%";
+    const wrap = h("div", "range-wrap"); wrap.append(band, range);
+    const out = h("span", "out-flag", "Outside training range"); out.hidden = true;
+    const bot = h("div", "srow-bot small"); bot.append(h("span", null, "shaded = range in the training data: " + fmt(tlo, d.dec) + " to " + fmt(thi, d.dec)), out);
+    row.append(top, wrap, bot); box.append(row);
+    const r = {d, range, num, out, lo, hi, tlo, thi};
+    const clamp = v => Math.min(hi, Math.max(lo, v));
+    const store = v => { pg.values[i] = v; out.hidden = !(v < tlo || v > thi); pgSchedule(); };
+    range.addEventListener("input", () => { const v = Number(range.value); num.value = fmt(v, d.dec); store(v); });
+    num.addEventListener("input", () => { const v = Number(num.value); if (num.value === "" || !isFinite(v)) return; const c = clamp(v); range.value = c; store(c); });
+    num.addEventListener("change", () => { const c = clamp(Number(num.value) || lo); num.value = fmt(c, d.dec); range.value = c; store(c); });
+    r.set = v => { const c = clamp(v); range.value = c; num.value = fmt(c, d.dec); pg.values[i] = c; out.hidden = !(c < tlo || c > thi); };
+    pg.rows.push(r);
+  });
+  pg.bars = makeBars($("pg-bars"), 5);
+  pg.built = true;
+}
+function pgApply(values) { pg.rows.forEach((r, i) => r.set(values[i])); pgSchedule(); }
+function pgLoad(values, from) {          // start a new experiment from these values
+  if (!pg.built) pgBuild(lastState);
+  pg.base = values.slice(); pg.baseRes = null; pg.wantBase = true;
+  $("pg-from").textContent = "Started from: " + from + ". Everything below is compared with that start.";
+  pgApply(values);
+}
+async function pgOpen() {
+  if (!lastState || pg.built) return;
+  pgBuild(lastState);
+  await pgRandom();
+}
+async function pgRandom() {
+  try {
+    const r = await fetch("/api/sample?crop=" + encodeURIComponent($("pg-crop").value), {cache: "no-store"});
+    const row = await r.json();
+    pgLoad(row.values, "dataset row " + row.row + " (" + nice(row.crop) + ")");
+  } catch (e) { $("pg-from").textContent = "Could not get an example from the laptop program."; }
+}
+function pgSchedule() { clearTimeout(pg.timer); pg.timer = setTimeout(pgPredict, 120); }
+async function pgPredict() {
+  const my = ++pg.seq, q = QUERY_KEYS.map((k, i) => k + "=" + pg.values[i]).join("&");
+  try {
+    const r = await fetch("/api/predict?" + q, {cache: "no-store"}), res = await r.json();
+    if (my !== pg.seq) return;           // a newer slider move is already on its way
+    if (pg.wantBase && res.ok) { pg.baseRes = res; pg.wantBase = false; }
+    pgShow(res);
+  } catch (e) { /* the status pill already tells when the program is gone */ }
+}
+function pgShow(res) {
+  const note = $("pg-note");
+  if (!res.ok) { $("pg-name").textContent = "Not accepted"; $("pg-line").textContent = res.problem; note.hidden = true; return; }
+  const top = res.top, best = top[0];
+  $("pg-name").textContent = nice(best.crop); $("pg-emoji").textContent = EMOJI[best.crop] || "\u{1F331}";
+  $("pg-conf").textContent = pct(best.p); $("pg-fill").style.width = Math.round(best.p * 100) + "%"; $("pg-meter").setAttribute("aria-valuenow", Math.round(best.p * 100));
+  fillBars(pg.bars, top);
+  $("pg-line").textContent = res.line;
+  note.hidden = !res.note; note.textContent = res.note ? "Note: " + res.note : "";
+  const ul = $("pg-changes"); ul.replaceChildren();
+  let changed = 0;
+  SENSORS.forEach((d, i) => {
+    if (!pg.base || Math.abs(pg.values[i] - pg.base[i]) < 1e-9) return;
+    changed++; ul.append(h("li", null, d.label + ": " + fmt(pg.base[i], d.dec) + " → " + fmt(pg.values[i], d.dec) + (d.unit ? " " + d.unit : "")));
+  });
+  if (!changed) ul.append(h("li", null, "Nothing changed yet. Move a slider."));
+  const b = pg.baseRes && pg.baseRes.top[0];
+  $("pg-rec").textContent = !b ? "" : (b.crop === best.crop
+    ? "Recommendation unchanged: " + nice(best.crop) + " (" + pct(b.p) + " → " + pct(best.p) + ")"
+    : "Recommendation changed: " + nice(b.crop) + " (" + pct(b.p) + ") → " + nice(best.crop) + " (" + pct(best.p) + ")");
+}
+$("pg-random").addEventListener("click", pgRandom);
+$("pg-reset").addEventListener("click", () => { if (pg.base) { pgApply(pg.base); } });
+$("pg-sensor").addEventListener("click", () => {
+  if (lastState && lastState.latest) pgLoad(lastState.latest.values, "the latest sensor reading");
+  else $("pg-from").textContent = "No sensor reading has arrived yet.";
+});
+$("pg-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("pg-line").textContent); $("pg-copy").textContent = "Copied"; setTimeout(() => { $("pg-copy").textContent = "Copy"; }, 1500); } catch (e) { /* clipboard not allowed */ }
+});
+
+let failures = 0;
+if (INITIAL) render(INITIAL);
+showTab(location.hash.slice(1));   // the server puts the current state into the page, so there is no empty first paint
+async function tick() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    if (!r.ok) throw new Error("http " + r.status);
+    const s = await r.json();
+    failures = 0; document.body.classList.remove("offline"); render(s);
+  } catch (e) {
+    if (++failures >= 2) {
+      document.body.classList.add("offline");
+      const el = $("status"); el.className = "pill"; el.replaceChildren(warnIcon(), h("span", null, "Lost connection to the laptop program"));
+    }
+  }
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

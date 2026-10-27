@@ -1,0 +1,8 @@
+# keep line endings right on every computer (Windows .bat needs CRLF, Linux/macOS .sh needs LF)
+* text=auto
+*.bat text eol=crlf
+*.sh  text eol=lf
+*.py  text eol=lf
+*.onnx binary
+*.pth  binary
+*.png  binary

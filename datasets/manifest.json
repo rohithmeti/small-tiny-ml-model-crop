@@ -1,0 +1,121 @@
+{
+  "_comment": "Single source of truth for every dataset: where it comes from, license, expected checksum. fetch_datasets.py downloads + verifies from this; --docs regenerates SOURCE.md files and docs/DATASETS.md.",
+  "datasets": [
+    {
+      "dir": "crop_recommendation_kaggle_atharvaingle",
+      "title": "Crop Recommendation Dataset (Atharva Ingle)",
+      "role": "PRIMARY - used by all training code",
+      "landing_url": "https://www.kaggle.com/datasets/atharvaingle/crop-recommendation-dataset",
+      "reference_notebook": "https://www.kaggle.com/code/atharvaingle/what-crop-to-grow",
+      "license": "Kaggle page does not state a clear license (author says it was assembled from public India rainfall/climate/fertilizer data). A CC BY 4.0 copy exists on Figshare.",
+      "kind": "zip",
+      "url": "https://www.kaggle.com/api/v1/datasets/download/atharvaingle/crop-recommendation-dataset",
+      "fallback_csv_url": "https://ndownloader.figshare.com/files/47707906",
+      "member": "Crop_recommendation.csv",
+      "save_as": "Crop_recommendation.csv",
+      "sha256": "54a5a6e5408668e668667efc50de2fc867c1b875e0431b4f54dd331b0a109a4e",
+      "rows": 2200,
+      "columns": "N, P, K, temperature, humidity, ph, rainfall, label",
+      "classes": "22 crops x 100 rows (perfectly balanced)",
+      "notes": "Kaggle's public download endpoint worked WITHOUT login (HTTP 200, 65 KB zip). Verified byte-identical to the Figshare CC BY 4.0 copy (https://figshare.com/articles/dataset/Crop_Recommendation_dataset/26308696); a Hugging Face Space copy has identical values (only line endings differ). Clean, balanced, no nulls: published papers report ~98-99.6% accuracy."
+    },
+    {
+      "dir": "crop_micronutrients_mendeley_7j8cz7p7w9",
+      "title": "Smart Crop Recommendation (Kaggle data + Cu, Fe, Mg, S)",
+      "role": "optional extension (not used by code yet)",
+      "landing_url": "https://data.mendeley.com/datasets/7j8cz7p7w9",
+      "license": "CC BY 4.0",
+      "kind": "mendeley", "id": "7j8cz7p7w9",
+      "files": [{"suffix": ".csv", "save_as": "crop_micronutrients.csv"}],
+      "rows": 2200,
+      "columns": "Nitrogen(N), phosphorus (P), Potassium(K), Copper(cu), Iron(Fe), Magnesium(Mg), Sulpher(S), Temperature, Humidity, pH, Rainfall(cm), Crops",
+      "classes": "22 crops x 100 rows",
+      "notes": "Same N/P/K/temperature/humidity/pH/rainfall values as the primary set plus 4 extra micronutrient columns (11 features). Column header says rainfall in cm but the values equal the primary set's mm values - treat the unit label as unreliable."
+    },
+    {
+      "dir": "croprec_bd_iot_mendeley_dtf278skpw",
+      "title": "CropRec-BD: crop recommendation for Bangladesh using IoT sensors",
+      "role": "reference - real low-cost-sensor data, different features",
+      "landing_url": "https://data.mendeley.com/datasets/dtf278skpw",
+      "license": "CC BY 4.0",
+      "kind": "mendeley", "id": "dtf278skpw",
+      "files": [{"suffix": ".csv", "save_as": "final_crops_data.csv"}],
+      "rows": 2892,
+      "columns": "Soil (moisture fraction), Soil_Moisture, Humidity, Temperature, Crop Name",
+      "classes": "9 crops, 180-608 rows each (imbalanced); label has typos such as 'Sugercane'",
+      "notes": "Only 4 sensor features (no NPK/pH/rain), so it cannot feed the 7-feature model. Useful to see how real sensor data differs: description is inconsistent about collection years (20XX-2025 vs 2017-2022) and the listing has no independent publication - treat as unvalidated."
+    },
+    {
+      "dir": "crop_seasonal_ranges_mendeley_vynxnppr7j",
+      "title": "Crop recommendation (crop requirement ranges: soil, season, N-P-K, water)",
+      "role": "reference - agronomic ranges, different schema",
+      "landing_url": "https://data.mendeley.com/datasets/vynxnppr7j",
+      "license": "CC BY 4.0",
+      "kind": "mendeley", "id": "vynxnppr7j",
+      "files": [{"suffix": ".csv", "save_as": "crop_requirements.csv"}],
+      "rows": 57000,
+      "columns": "CROPS, TYPE_OF_CROP, SOIL, SEASON, SOWN, HARVESTED, WATER_SOURCE, SOIL_PH, SOIL_PH_HIGH, CROPDURATION(+MAX), TEMP, MAX_TEMP, WATERREQUIRED(+MAX), RELATIVE_HUMIDITY(+MAX), N(+MAX), P(+MAX), K(+MAX)",
+      "classes": "57 crops x exactly 1000 rows (looks generated from per-crop min/max ranges)",
+      "notes": "Per-crop requirement ranges rather than field measurements; exactly 1000 rows per class suggests synthetic expansion. Good for a 'does the recommended crop fit agronomic ranges' sanity check, not for accuracy claims."
+    },
+    {
+      "dir": "crop_soil_weather_ethiopia_mendeley_8v757rr4st",
+      "title": "Crop Recommendation using Soil Properties and Weather Prediction (Ethiopia)",
+      "role": "reference - different region/features",
+      "landing_url": "https://data.mendeley.com/datasets/8v757rr4st",
+      "license": "CC BY-NC-ND 4.0 (NON-COMMERCIAL, NO DERIVATIVES - fine for coursework, do not redistribute modified copies)",
+      "kind": "mendeley", "id": "8v757rr4st",
+      "files": [{"suffix": ".csv", "save_as": "crop_soil_weather.csv"}],
+      "rows": 3867,
+      "columns": "Soilcolor, Ph, K, P, N, Zn, S, seasonal humidity/temperature/precipitation (W/Sp/Su/Au), WD10M, GWETTOP, CLOUD_AMT, WS2M_RANGE, PS, label (29 columns)",
+      "classes": "12 crops, 26-1260 rows each (heavily imbalanced)",
+      "notes": "Satellite-weather (NASA POWER style) features + lab soil tests; a harder, realistic, imbalanced problem."
+    },
+    {
+      "dir": "agrinet_rice_soil_fertility_mendeley_c7tr9j78td",
+      "title": "AgriNet: soil fertility for rice fertilizer recommendation (Bareilly, India)",
+      "role": "reference - real lab soil tests, no label column",
+      "landing_url": "https://data.mendeley.com/datasets/c7tr9j78td",
+      "license": "CC BY 4.0",
+      "kind": "mendeley", "id": "c7tr9j78td",
+      "files": [{"suffix": ".csv", "save_as": "agrinet_soil_tests.csv"}, {"suffix": ".md", "save_as": "README_original.md"}],
+      "rows": 257,
+      "columns": "Sample, pH, EC, OC, N, P, K, S, Zn, B, Fe, Mn, Cu, Area in Acre, Bigha",
+      "classes": "none (soil test values only)",
+      "notes": "Real KVK/IVRI laboratory soil-test certificates typed into a sheet. The scanned-certificate PDF (9.7 MB) is intentionally NOT downloaded. Shows real-world N/P/K magnitudes (N in 150-200 kg/ha range) which differ from the Kaggle set's scale."
+    },
+    {
+      "dir": "fertilizer_prediction_huggingface_kaifahmad",
+      "title": "Fertilizer Prediction (small)",
+      "role": "optional stage-2 demo (not used by code yet)",
+      "landing_url": "https://huggingface.co/datasets/kaifahmad/Fertilizer-Prediction",
+      "license": "apache-2.0 (per dataset card)",
+      "kind": "url",
+      "url": "https://huggingface.co/datasets/kaifahmad/Fertilizer-Prediction/resolve/main/Fertilizer%20Prediction.csv",
+      "save_as": "Fertilizer_Prediction.csv",
+      "sha256": "fc185064de82310f3343ba6dc85631ebca2c09ebbd0de522fc1731a4db2b7b0a",
+      "rows": 99,
+      "columns": "Temparature, Humidity (header has trailing space), Moisture, Soil Type, Crop Type, Nitrogen, Potassium, Phosphorous, Fertilizer Name",
+      "classes": "7 fertilizers (Urea 22, DAP 18, 28-28 17, 14-35-14 14, 20-20 14, 17-17-17 7, 10-26-26 7)",
+      "notes": "Only 99 rows - a toy set; do not quote accuracy from it. Larger (~10k row) versions exist on Kaggle but need a Kaggle login."
+    },
+    {
+      "dir": "yield_india_mendeley_ncw2vbcgnk",
+      "title": "India crop yield 1997-2020 (state level)",
+      "role": "optional yield-regression add-on (not used by code yet)",
+      "landing_url": "https://data.mendeley.com/datasets/ncw2vbcgnk",
+      "license": "CC BY 4.0",
+      "kind": "mendeley", "id": "ncw2vbcgnk",
+      "files": [{"suffix": ".csv", "save_as": "crop_yield.csv"}],
+      "rows": 19689,
+      "columns": "Crop, Crop_Year, Season, State, Area, Production, Annual_Rainfall, Fertilizer, Pesticide, Yield",
+      "classes": "regression target Yield (55 crops, 27 states + 3 UTs); Season strings have trailing spaces",
+      "notes": "Ramesh V and Kumaresan P, VIT University. Yield = Production / Area."
+    }
+  ],
+  "not_downloaded": [
+    {"name": "IEEE DataPort - Crop Recommendation (IoT oriented, DOI 10.21227/12nr-fe03)", "url": "https://ieee-dataport.org/documents/crop-recommendation", "reason": "needs an IEEE DataPort login/subscription"},
+    {"name": "IEEE DataPort - Soil Fertility Data For Fertilizer Recommendation", "url": "https://ieee-dataport.org/node/14134", "reason": "needs IEEE DataPort login"},
+    {"name": "Kaggle Fertilizer Prediction (~10k rows, mohitsingh14 upload)", "url": "https://www.kaggle.com/search?q=fertilizer+prediction", "reason": "exact dataset URL not verified; most Kaggle datasets download only with a login (the Crop Recommendation one happened to work without)"}
+  ]
+}
