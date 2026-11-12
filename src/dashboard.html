@@ -14,6 +14,7 @@
   --grid: #e1e0d9;  --axis: #c3c2b7;  --border: rgba(11,11,11,.10);
   --accent: #2a78d6;  --track: #cde2fb;  --wash: rgba(42,120,214,.10);
   --good: #0ca30c;  --warning: #fab219;  --critical: #d03b3b;
+  --miss: #eb6834;   /* confusion matrix: wrong answers (orange); right answers use --accent (blue) */
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
@@ -21,7 +22,7 @@
     --page: #0d0d0d;  --surface: #1a1a19;
     --ink: #f0efec;  --ink-2: #c3c2b7;
     --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,.10);
-    --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);
+    --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);  --miss: #d95926;
   }
 }
 :root[data-theme="dark"] {
@@ -29,7 +30,7 @@
   --page: #0d0d0d;  --surface: #1a1a19;
   --ink: #f0efec;  --ink-2: #c3c2b7;
   --grid: #2c2c2a;  --axis: #383835;  --border: rgba(255,255,255,.10);
-  --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);
+  --accent: #3987e5;  --track: #184f95;  --wash: rgba(57,135,229,.16);  --miss: #d95926;
 }
 
 * { box-sizing: border-box; }
@@ -154,6 +155,53 @@ th.l, td.l { text-align: left; }
 .rej svg, .kv-val svg { flex: none; }
 footer { margin-top: 18px; text-align: center; }
 
+/* confusion matrix: row = true crop, column = model answer */
+.cm-wrap { overflow-x: auto; scrollbar-color: var(--axis) transparent; padding-bottom: 4px; }
+.cm { display: grid; gap: 2px; width: max-content; font-size: .72rem; font-variant-numeric: tabular-nums;
+  grid-template-columns: 92px repeat(var(--n), var(--cell, 30px)) 54px; }
+.cm-cell { height: var(--cell, 30px); border-radius: 3px; display: grid; place-items: center; color: var(--ink);
+  background: color-mix(in oklab, var(--grid) 45%, var(--surface)); }
+.cm-cell.strong { color: #fff; }
+.cm-cell.last { outline: 2px solid var(--ink); outline-offset: 1px; position: relative; z-index: 1; }
+.cm-rl { color: var(--ink-2); text-align: right; padding-right: 6px; align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-rl.last { color: var(--ink); font-weight: 600; }
+.cm-cl { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--ink-2); white-space: nowrap; justify-self: center; padding-top: 4px; max-height: 92px; overflow: hidden; text-overflow: ellipsis; }
+.cm-cl.last { color: var(--ink); font-weight: 600; }
+.cm-rs { color: var(--ink-2); align-self: center; padding-left: 6px; white-space: nowrap; }
+.cm-head { color: var(--muted); align-self: end; font-size: .7rem; }
+.cm.mini { gap: 1px; grid-template-columns: repeat(var(--n), 6px); }
+.cm.mini .cm-cell { height: 6px; border-radius: 1px; }
+.cm-axes { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .78rem; color: var(--ink-2); margin: 10px 0 6px; }
+.cm-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 8px; }   /* matrix on top, mistakes under it */
+.cm-layout > :last-child { border-top: 1px solid var(--grid); padding-top: 14px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--ink-2); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 28px; height: 10px; border-radius: 3px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--axis); border-radius: 10px; }
+.seg button { font: inherit; font-size: .82rem; border: 0; background: transparent; color: var(--ink-2); padding: 4px 12px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--wash); color: var(--ink); font-weight: 600; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kvs.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) { .kvs.four { grid-template-columns: 1fr 1fr; } }
+.miss-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; font-size: .86rem; }
+.miss-list { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); column-gap: 28px; }
+.miss-list li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; }
+.miss-list i { width: 10px; height: 10px; border-radius: 2px; background: var(--miss); }
+.res-table tbody tr { cursor: pointer; }
+.res-table tbody tr:hover { background: color-mix(in oklab, var(--wash) 60%, transparent); }
+.res-table tbody tr.sel { background: var(--wash); }
+.res-table td.best { font-weight: 650; color: var(--ink); }
+.linkbtn { font: inherit; font-size: .85rem; border: 0; background: none; padding: 0; color: var(--ink); cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--axis); text-underline-offset: 3px; }
+.linkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tag { display: inline-block; font-size: .72rem; padding: 1px 8px; border-radius: 99px; background: var(--wash); color: var(--ink); margin-left: 6px; vertical-align: 1px; }
+.minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; margin-top: 12px; }
+.mini-card { font: inherit; text-align: left; color: var(--ink); background: var(--page); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; cursor: pointer; display: grid; gap: 6px; justify-items: start; }
+.mini-card:hover { border-color: var(--axis); }
+.mini-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mini-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mini-name { font-size: .85rem; font-weight: 600; }
+.mini-acc { font-size: 1.15rem; font-weight: 650; }
+
 /* tooltip */
 #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--page); border-radius: 8px;
   padding: 6px 10px; font-size: .8rem; display: grid; gap: 1px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
@@ -177,6 +225,7 @@ footer { margin-top: 18px; text-align: center; }
 
   <nav class="tabs" role="tablist" aria-label="Views">
     <button class="tab-btn" role="tab" id="btn-live" data-tab="live" aria-selected="true">Live</button>
+    <button class="tab-btn" role="tab" id="btn-models" data-tab="models" aria-selected="false">Models</button>
     <button class="tab-btn" role="tab" id="btn-data" data-tab="data" aria-selected="false">Data</button>
     <button class="tab-btn" role="tab" id="btn-playground" data-tab="playground" aria-selected="false">Playground</button>
   </nav>
@@ -200,6 +249,42 @@ footer { margin-top: 18px; text-align: center; }
 
   <h3 class="section-title">Sensors <span class="small">latest reading &middot; dot shows where it sits in the training data range &middot; line shows the last 30 readings</span></h3>
   <section id="tiles" class="tiles"></section>
+
+  <section class="stack" style="margin-bottom:16px">
+    <article class="card" id="live-cm-card">
+      <div class="controls" style="margin:0 0 4px">
+        <h3>Live confusion matrix</h3><span class="spacer"></span>
+        <div class="seg" role="group" aria-label="Which answer to count">
+          <button id="cm-raw" aria-pressed="true" title="The model's answer for each single reading">Each reading</button>
+          <button id="cm-smoothed" aria-pressed="false" title="The averaged answer shown in the big card (lags when the crop changes)">Smoothed</button>
+        </div>
+        <button class="btn" id="cm-reset">Start over</button>
+      </div>
+      <p class="small" id="cm-sub">Every reading adds one count: row = the crop the sensor is really simulating, column = what the model answered. Right answers land on the blue diagonal, mistakes show up in orange.</p>
+      <div class="kvs four">
+        <div><div class="kv-val" id="cm-n">0</div><p class="small">Readings counted</p></div>
+        <div><div class="kv-val" id="cm-acc">--</div><p class="small">On the diagonal (right)</p></div>
+        <div><div class="kv-val" id="cm-cov">0 / 22</div><p class="small">Crops seen so far</p></div>
+        <div><div class="kv-val" id="cm-since">--</div><p class="small">Counting since</p></div>
+      </div>
+      <div class="cm-layout">
+        <div style="min-width:0">
+          <div class="cm-axes"><span>Rows: true crop</span><span>Columns: model answer &middot; last column: right / total for that crop</span></div>
+          <div class="cm-wrap"><div id="live-cm" class="cm" role="img"></div></div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--accent) 12%,var(--surface)),var(--accent))"></i>right answer (darker = larger share of that crop)</span>
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--miss) 40%,var(--surface)),var(--miss))"></i>mistake</span>
+            <span><i class="swatch" style="outline:2px solid var(--ink);outline-offset:1px;background:transparent"></i>latest reading</span>
+          </div>
+        </div>
+        <div>
+          <h3>Most common mistakes</h3>
+          <ul id="live-miss" class="miss-list"></ul>
+          <p id="cm-note" class="hint-box" hidden></p>
+        </div>
+      </div>
+    </article>
+  </section>
 
   <section class="stack">
     <article class="card">
@@ -231,6 +316,54 @@ footer { margin-top: 18px; text-align: center; }
       <div><p class="small">Why the last readings were rejected</p>
       <ul id="rej" class="rej"></ul></div>
       </div>
+    </article>
+  </section>
+</div>
+
+<div id="tab-models" role="tabpanel" aria-labelledby="btn-models" hidden>
+  <section class="stack">
+    <article class="card">
+      <div class="controls" style="margin:0 0 4px"><h3>Every trained model</h3><span class="spacer"></span><button class="btn" id="m-reload">Reload results</button></div>
+      <p class="hint-box" id="m-intro">Results written by <code>python run.py train</code>. Each model type is trained twice: plain, and noise-aware (with extra noisy copies of the training rows). Click a row to see its confusion matrix. Best value in each column is bold.</p>
+      <div class="tablewrap"><table class="res-table">
+        <thead><tr><th class="l">Model</th><th class="l">Training</th><th>Cross-val (train rows)</th><th>Test: perfect sensors</th><th>Test: good sensors</th><th>Test: cheap sensors</th><th>Top-3</th><th>Macro-F1</th><th>Fit time</th></tr></thead>
+        <tbody id="m-rows"></tbody>
+      </table></div>
+      <p id="m-msg" class="small"></p>
+    </article>
+    <article class="card">
+      <div class="controls" style="margin:0 0 4px">
+        <h3 id="m-title">Confusion matrix</h3><span class="spacer"></span>
+        <div class="seg" role="group" aria-label="Sensor quality">
+          <button data-cond="clean" aria-pressed="true">Perfect sensors</button>
+          <button data-cond="good" aria-pressed="false">Good sensors</button>
+          <button data-cond="cheap" aria-pressed="false">Cheap sensors</button>
+        </div>
+      </div>
+      <p class="small" id="m-sub"></p>
+      <div class="cm-layout">
+        <div style="min-width:0">
+          <div class="cm-axes"><span>Rows: true crop</span><span>Columns: model answer &middot; last column: right / total for that crop</span></div>
+          <div class="cm-wrap"><div id="m-cm" class="cm" role="img"></div></div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--accent) 12%,var(--surface)),var(--accent))"></i>right answer</span>
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--miss) 40%,var(--surface)),var(--miss))"></i>mistake (darker = larger share of that crop)</span>
+          </div>
+        </div>
+        <div>
+          <div class="kvs" style="margin-top:0">
+            <div><div class="kv-val" id="m-acc">--</div><p class="small">Right</p></div>
+            <div><div class="kv-val" id="m-wrong">--</div><p class="small">Wrong</p></div>
+          </div>
+          <h3>Most common mistakes</h3>
+          <ul id="m-miss" class="miss-list"></ul>
+        </div>
+      </div>
+    </article>
+    <article class="card">
+      <h3>All confusion matrices at a glance <span class="small" id="m-glance-sub" style="font-weight:400"></span></h3>
+      <p class="small">Same colours as above. A clean diagonal line with no orange dots = no mistakes. Click one to open it.</p>
+      <div id="m-minis" class="minis"></div>
     </article>
   </section>
 </div>
@@ -500,17 +633,182 @@ function renderSession(s) {
     "  ·  Runs on this laptop's CPU, nothing leaves your computer";
 }
 
+/* ---------- confusion matrix (shared by the Live and Models tabs) ---------- */
+// makeCM builds the grid once; update() only recolours it, so the live one can refresh every second without flicker.
+function makeCM(box, classes, mini) {
+  const n = classes.length, cells = [], rowL = [], colL = [], rowS = [];
+  box.replaceChildren(); box.style.setProperty("--n", n);
+  if (mini) box.classList.add("mini");
+  if (!mini) {
+    box.append(h("span", "cm-head"));
+    classes.forEach(c => { const e = h("span", "cm-cl", nice(c)); colL.push(e); box.append(e); });
+    box.append(h("span", "cm-head", "right"));
+  }
+  const cm = {n, classes, cells, data: null};
+  classes.forEach((c, t) => {
+    if (!mini) { const e = h("span", "cm-rl", nice(c)); e.title = nice(c); rowL.push(e); box.append(e); }
+    cells.push([]);
+    classes.forEach((c2, a) => {
+      const e = h("span", "cm-cell"); cells[t].push(e); box.append(e);
+      if (!mini) {
+        e.addEventListener("pointermove", ev => {
+          const k = cm.data ? cm.data[t][a] : 0, tot = cm.data ? cm.data[t].reduce((x, y) => x + y, 0) : 0;
+          showTip(ev.clientX, ev.clientY, nice(c) + (t === a ? " \u2192 " + nice(c2) + " (right)" : " read as " + nice(c2)),
+                  k + (k === 1 ? " reading" : " readings") + (tot ? " \u00b7 " + pct(k / tot) + " of " + nice(c) : ""));
+        });
+        e.addEventListener("pointerleave", hideTip);
+      }
+    });
+    if (!mini) { const e = h("span", "cm-rs"); rowS.push(e); box.append(e); }
+  });
+  cm.update = (data, last) => {
+    cm.data = data;
+    let right = 0, total = 0;
+    data.forEach((row, t) => {
+      const tot = row.reduce((x, y) => x + y, 0); total += tot; right += row[t];
+      row.forEach((k, a) => {
+        const e = cells[t][a], share = tot ? k / tot : 0;
+        let mix = 0;
+        if (k) mix = t === a ? 12 + 88 * share : 40 + 60 * Math.min(1, share * 3);   // mistakes are rare: boost them so one shows
+        e.style.background = k ? `color-mix(in oklab, var(${t === a ? "--accent" : "--miss"}) ${mix.toFixed(0)}%, var(--surface))` : "";
+        e.classList.toggle("strong", mix > 58);
+        e.classList.toggle("last", !!last && last.t === t && last.a === a);
+        if (!mini) e.textContent = k ? k : "";
+      });
+      if (!mini) {
+        rowS[t].textContent = tot ? row[t] + "/" + tot : "";
+        rowL[t].classList.toggle("last", !!last && last.t === t);
+      }
+    });
+    colL.forEach((e, a) => e.classList.toggle("last", !!last && last.a === a));
+    box.setAttribute("aria-label", `Confusion matrix: ${right} of ${total} right` + (total ? ` (${(100 * right / total).toFixed(1)}%)` : ""));
+    return {right, total};
+  };
+  return cm;
+}
+function mistakes(data, classes, max) {   // the biggest off-diagonal cells, as text (also the non-visual version of the matrix)
+  const out = [];
+  data.forEach((row, t) => { const tot = row.reduce((x, y) => x + y, 0); row.forEach((k, a) => { if (k && a !== t) out.push({t, a, k, tot}); }); });
+  return out.sort((x, y) => y.k - x.k || x.t - y.t).slice(0, max);
+}
+function fillMistakes(ul, list, classes, unit, emptyText) {
+  ul.replaceChildren();
+  if (!list.length) { ul.append(h("li", null, emptyText)); ul.firstChild.style.display = "block"; return; }
+  list.forEach(m => {
+    const li = h("li"); li.append(h("i"), h("span", null, nice(classes[m.t]) + " read as " + nice(classes[m.a])),
+      h("span", "small", m.k + " " + unit + (m.k === 1 ? "" : "s") + " \u00b7 " + pct(m.k / m.tot)));
+    ul.append(li);
+  });
+}
+
+/* live matrix: counts come from the server (dashboard.py State.add); this only draws them */
+let liveCM = null, cmMode = "raw";
+function renderLiveCM(s) {
+  if (!s.classes || !s.cm) return;
+  if (!liveCM) liveCM = makeCM($("live-cm"), s.classes, false);
+  const data = s.cm[cmMode], L = s.cm_last;
+  const last = L ? {t: L.truth, a: cmMode === "raw" ? L.raw : L.smoothed} : null;
+  const {right, total} = liveCM.update(data, last);
+  $("cm-n").textContent = total.toLocaleString();
+  $("cm-acc").textContent = total ? (100 * right / total).toFixed(1) + "%" : "--";
+  $("cm-cov").textContent = data.filter(r => r.some(k => k)).length + " / " + s.classes.length;
+  $("cm-since").textContent = s.cm_since || "--";
+  fillMistakes($("live-miss"), mistakes(data, s.classes, 6), s.classes, "reading",
+               total ? "No mistakes yet." : "Nothing counted yet.");
+  const note = $("cm-note");
+  note.hidden = s.source === "demo";
+  if (s.source !== "demo") note.textContent = "This matrix needs to know the real crop, and only the built-in demo sensor knows it. " +
+    "A real sensor (" + s.source + ") only sends measurements, so here use the Models tab, which shows every model on the 440 test rows.";
+  else if (cmMode === "smoothed") note.hidden = false, note.textContent = "Smoothed answers average the last few readings, so right after the demo sensor switches crop they still point at the previous crop for a moment. Those show up as mistakes here.";
+}
+$("cm-raw").addEventListener("click", () => setCmMode("raw"));
+$("cm-smoothed").addEventListener("click", () => setCmMode("smoothed"));
+function setCmMode(m) { cmMode = m; $("cm-raw").setAttribute("aria-pressed", String(m === "raw")); $("cm-smoothed").setAttribute("aria-pressed", String(m === "smoothed")); if (lastState) renderLiveCM(lastState); }
+$("cm-reset").addEventListener("click", async () => { try { await fetch("/api/cm/reset", {method: "POST"}); tick(); } catch (e) { /* offline: the pill says so */ } });
+
+/* ---------- Models tab: every trained model's results + confusion matrix ---------- */
+const mt = {data: null, sel: 0, cond: "clean", big: null, minis: []};
+const COND = {
+  clean: d => `The ${d.test_rows} test rows the model never saw while training, exactly as in the dataset.`,
+  good: d => `The ${d.test_rows} test rows \u00d7 ${d.noisy_copies} copies with good-sensor error added (DHT22, NPK 5 %, pH 0.1) = ${(d.test_rows * d.noisy_copies).toLocaleString()} readings.`,
+  cheap: d => `The ${d.test_rows} test rows \u00d7 ${d.noisy_copies} copies with cheap-sensor error added (DHT11, NPK 10 %, pH 0.3) = ${(d.test_rows * d.noisy_copies).toLocaleString()} readings.`};
+const COLS = [["cv_acc", v => (100 * v).toFixed(1) + "%"], ["test_acc", v => (100 * v).toFixed(1) + "%"], ["acc_good_noise", v => (100 * v).toFixed(1) + "%"],
+              ["acc_cheap_noise", v => (100 * v).toFixed(1) + "%"], ["top3", v => (100 * v).toFixed(1) + "%"], ["macro_f1", v => v.toFixed(3)], ["fit_seconds", v => v.toFixed(2) + " s"]];
+const modelName = m => (MODELS[m.model] || m.model);
+const isDeployed = (d, m) => d.deployed.model === m.model && d.deployed.noise_aware === m.noise_aware;
+
+async function mtLoad() {
+  try {
+    const r = await fetch("/api/models", {cache: "no-store"}), d = await r.json();
+    if (!d.ok) { $("m-msg").textContent = d.problem; return; }
+    mt.data = d; mt.sel = Math.max(0, d.models.findIndex(m => isDeployed(d, m)));
+    mtTable(); mtMinis(); mtShow(); $("m-msg").textContent = "";
+  } catch (e) { $("m-msg").textContent = "Could not load the training results from the laptop program."; }
+}
+function mtTable() {
+  const d = mt.data, body = $("m-rows"); body.replaceChildren();
+  const best = COLS.map(([k]) => k === "fit_seconds" ? Math.min(...d.models.map(m => m[k])) : Math.max(...d.models.map(m => m[k])));
+  d.models.forEach((m, i) => {
+    const tr = h("tr"), name = h("td", "l"), b = h("button", "linkbtn", modelName(m));
+    b.addEventListener("click", e => { e.stopPropagation(); mtSelect(i); });
+    name.append(b); if (isDeployed(d, m)) name.append(h("span", "tag", "deployed"));
+    tr.append(name, h("td", "l", m.noise_aware ? "noise-aware" : "plain"));
+    COLS.forEach(([k, f], j) => tr.append(h("td", m[k] === best[j] ? "best" : null, m[k] === undefined ? "--" : f(m[k]))));
+    tr.addEventListener("click", () => mtSelect(i));
+    body.append(tr);
+  });
+}
+function mtMinis() {
+  const d = mt.data, box = $("m-minis"); box.replaceChildren(); mt.minis = [];
+  d.models.forEach((m, i) => {
+    const card = h("button", "mini-card"), acc = h("span", "mini-acc"), grid = h("div", "cm");
+    card.append(h("span", "mini-name", modelName(m) + (isDeployed(d, m) ? " \u00b7 deployed" : "")),
+                h("span", "small", m.noise_aware ? "noise-aware training" : "plain training"), grid, acc);
+    card.addEventListener("click", () => { mtSelect(i); $("m-title").scrollIntoView({behavior: "smooth", block: "start"}); });
+    box.append(card);
+    mt.minis.push({card, acc, cm: makeCM(grid, d.classes, true)});
+  });
+}
+function mtSelect(i) { mt.sel = i; mtShow(); }
+function mtShow() {
+  const d = mt.data; if (!d) return;
+  const m = d.models[mt.sel], data = m[mt.cond];
+  if (!mt.big) mt.big = makeCM($("m-cm"), d.classes, false);
+  const {right, total} = mt.big.update(data, null);
+  const label = {clean: "perfect sensors", good: "good sensors", cheap: "cheap sensors"}[mt.cond];
+  $("m-title").textContent = "Confusion matrix: " + modelName(m) + (m.noise_aware ? " (noise-aware)" : " (plain)") + " \u00b7 " + label;
+  $("m-sub").textContent = COND[mt.cond](d);
+  $("m-acc").textContent = (100 * right / total).toFixed(1) + "%";
+  $("m-wrong").textContent = (total - right).toLocaleString() + " / " + total.toLocaleString();
+  fillMistakes($("m-miss"), mistakes(data, d.classes, 8), d.classes, "reading", "No mistakes at all.");
+  [...$("m-rows").children].forEach((tr, i) => tr.classList.toggle("sel", i === mt.sel));
+  mt.minis.forEach((x, i) => {
+    const r = x.cm.update(d.models[i][mt.cond], null);
+    x.acc.textContent = (100 * r.right / r.total).toFixed(1) + "% right";
+    x.card.setAttribute("aria-pressed", String(i === mt.sel));
+    x.card.setAttribute("aria-label", modelName(d.models[i]) + ", " + (d.models[i].noise_aware ? "noise-aware" : "plain") + ": " + x.acc.textContent);
+  });
+  $("m-glance-sub").textContent = "\u00b7 " + label;
+}
+document.querySelectorAll("[data-cond]").forEach(b => b.addEventListener("click", () => {
+  mt.cond = b.dataset.cond;
+  document.querySelectorAll("[data-cond]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  mtShow();
+}));
+$("m-reload").addEventListener("click", mtLoad);
+
 let lastState = null;
-function render(s) { lastState = s; renderStatus(s); renderHero(s); renderBars(s); renderTiles(s); renderTable(s); renderLines(s); renderSession(s); }
+function render(s) { lastState = s; renderStatus(s); renderHero(s); renderBars(s); renderTiles(s); renderLiveCM(s); renderTable(s); renderLines(s); renderSession(s); }
 
 /* ---------- tabs ---------- */
-const TABS = ["live", "data", "playground"];
+const TABS = ["live", "models", "data", "playground"];
 function showTab(name) {
   if (!TABS.includes(name)) name = "live";
   TABS.forEach(t => { $("tab-" + t).hidden = t !== name; $("btn-" + t).setAttribute("aria-selected", String(t === name)); });
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* file:// pages */ }
   hideTip();
   if (name === "data" && !ds.loaded) dsLoad();
+  if (name === "models" && !mt.data) mtLoad();
   if (name === "playground") pgOpen();
 }
 document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));

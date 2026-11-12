@@ -55,12 +55,12 @@ annu_ml_cpu/
 ├─ sim/sensor_sim.py        fake ESP32: produces realistic sensor lines and sends them
 ├─ datasets/                data (+ fetch_datasets.py, manifest.json = sources, licenses, checksums; DATASETS.md = index)
 ├─ models/                  the trained model (made by `train`, already included)
-└─ results/                 report.md, confusion_matrix.png, metrics.json, bench.json (made by `train` / `bench`)
+└─ results/                 report.md, confusion_matrix.png, confusion_matrices.json, metrics.json, bench.json (made by `train` / `bench`)
 ```
 
 | File | Input | Output |
 |---|---|---|
-| `train.py` | `datasets/.../Crop_recommendation.csv` (2200 rows: 7 numbers + crop name) | `models/crop_model.onnx` (3 KB), `crop_model.json`, `crop_mlp.pth`; `results/report.md`, `confusion_matrix.png` |
+| `train.py` | `datasets/.../Crop_recommendation.csv` (2200 rows: 7 numbers + crop name) | `models/crop_model.onnx` (3 KB), `crop_model.json`, `crop_mlp.pth`; `results/report.md`, `confusion_matrix.png`, `confusion_matrices.json` (all 12 models, for the dashboard) |
 | `bench.py` | `models/crop_model.onnx` | speed/accuracy printed + `results/bench.json` |
 | `sensor_sim.py` | the dataset (real rows + simulated sensor error) | text lines: `N=90,P=42,K=43,T=21.5,H=80.1,PH=6.50,R=202.9` over TCP, serial port, or screen |
 | `live_predict.py` | those text lines (from `demo`, TCP, serial port or stdin) | one answer per line, or `REJECTED: reason` |
@@ -95,6 +95,11 @@ annu_ml_cpu/
   (`http://<laptop-ip>:8050`). Light or dark follows your computer; force one with `?theme=light` / `?theme=dark` on the address.
   **Data tab** = the training file as a table (filter by crop, page through it, each row shown as the text line a sensor would send).
   **Playground tab** = sliders and number boxes for all 7 inputs; raise N and K and the recommendation changes at once, with a list of what you changed.
+  **Live confusion matrix** (Live tab) = fills up reading by reading: row = the crop the demo sensor is really simulating, column = the model's answer
+  (blue diagonal = right, orange = mistakes, outlined cell = latest reading). Switch *Each reading* / *Smoothed*, *Start over* resets it.
+  It needs the true crop, so it only fills with the demo sensor (a real sensor does not know the answer).
+  **Models tab** = all 12 trained models (6 types x plain / noise-aware): results table + confusion matrix on the 440 test rows for perfect, good and
+  cheap sensors, and all 12 matrices side by side. It reads `results/metrics.json` + `results/confusion_matrices.json` (written by `train`).
 * **Retrain**: `train` (any time; it overwrites `models/`).
 
 | Problem | Fix |

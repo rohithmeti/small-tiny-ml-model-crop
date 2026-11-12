@@ -6,8 +6,10 @@
 
 INPUT : the same text lines as live_predict.py   N=90,P=42,K=43,T=21.5,H=80.1,PH=6.5,R=202.9
 OUTPUT: a web page at http://127.0.0.1:8050 that refreshes every second (dashboard.html). Nothing is stored.
-        Tabs:  Live (what the sensors say now, incl. the raw text lines)  |  Data (browse the 2200 training rows)
-               |  Playground (move sliders for N, P, K ... and watch the recommendation change)
+        Tabs:  Live (what the sensors say now, incl. the raw text lines, and a confusion matrix that fills up reading by reading)
+               |  Models (every trained model: results table + confusion matrix, from results/*.json written by `train`)
+               |  Data (browse the 2200 training rows)  |  Playground (move sliders for N, P, K ... and watch the recommendation change)
+        The live confusion matrix needs the true crop, which only the demo sensor knows (real sensors: Models tab only).
         Open it from a phone on the same Wi-Fi with  --host 0.0.0.0  and  http://<laptop-ip>:8050
 """
 import argparse
@@ -28,6 +30,20 @@ from live_predict import PHYSICAL, LivePredictor, line_source
 from sensor_sim import format_line   # (live_predict has put the sim/ folder on the path)
 
 PAGE_FILE = Path(__file__).resolve().parent / "dashboard.html"   # read on every request, so edits show up on refresh
+RESULTS = Path(__file__).resolve().parent.parent / "results"
+
+
+def model_results():
+    """Models tab: train.py's scores (metrics.json) + confusion matrices, one entry per (model, noise-aware). Read on every call."""
+    try:
+        metrics = json.loads((RESULTS / "metrics.json").read_text())
+        cms = json.loads((RESULTS / "confusion_matrices.json").read_text())
+    except (OSError, ValueError):
+        return {"ok": False, "problem": "No confusion matrices found. Run:  python run.py train   (about 1 minute), then reload."}
+    scores = {(r["model"], r["noise_aware"]): r for r in metrics["rows"]}
+    models = [dict(scores.get((m["model"], m["noise_aware"]), {}), **m) for m in cms["matrices"]]
+    return {"ok": True, "classes": cms["classes"], "test_rows": cms["test_rows"], "noisy_copies": cms["noisy_copies"],
+            "deployed": cms["deployed"], "models": models, "without_rainfall": metrics.get("without_rainfall")}
 
 
 class Dataset:
@@ -74,6 +90,15 @@ class State:
         self.recent = collections.deque(maxlen=8)        # rows of the "recent readings" table
         self.rejections = collections.deque(maxlen=4)    # why the last bad lines were refused
         self.lines = collections.deque(maxlen=12)        # the raw text lines as they arrived
+        self.reset_confusion()
+
+    def reset_confusion(self):
+        """Live confusion matrix (row = true crop from the simulator, column = model answer): per reading and after smoothing."""
+        n = len(self.pred.classes)
+        with self.lock:
+            self.cm = {"raw": np.zeros((n, n), dtype=int), "smoothed": np.zeros((n, n), dtype=int)}
+            self.cm_last = None
+            self.cm_since = time.strftime("%H:%M:%S")
 
     def add(self, line, truth):
         r = self.pred.process(line)
@@ -95,6 +120,10 @@ class State:
             if truth:
                 self.d["known"] += 1
                 self.d["right"] += classes[raw] == truth
+                t = classes.index(truth)
+                self.cm["raw"][t, raw] += 1
+                self.cm["smoothed"][t, int(order[0])] += 1
+                self.cm_last = {"n": self.d["seen"], "truth": t, "raw": raw, "smoothed": int(order[0])}
             values = [float(v) for v in r["x"]]
             self.history.append(values)
             self.recent.appendleft({"n": self.d["seen"], "t": clock, "values": values, "crop": classes[raw], "p": float(p[raw])})
@@ -106,7 +135,9 @@ class State:
         with self.lock:
             out = dict(self.d)
             out.update(history=list(self.history), recent=list(self.recent), rejections=list(self.rejections), lines=list(self.lines),
-                       age=None if out["last_update"] is None else time.time() - out["last_update"])
+                       age=None if out["last_update"] is None else time.time() - out["last_update"],
+                       classes=self.pred.classes, cm={k: v.tolist() for k, v in self.cm.items()}, cm_last=self.cm_last,
+                       cm_since=self.cm_since)
             return out
 
 
@@ -129,10 +160,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.data.sample(q.get("crop", [""])[0]))
             elif u.path == "/api/predict":      # "what if": answer for the values in the address, without touching the live smoothing
                 self._json(self._predict(q))
+            elif u.path == "/api/models":       # Models tab: every trained model's scores + confusion matrices
+                self._json(model_results())
             else:
                 self._send(b"not found", "text/plain", 404)
         except ValueError as e:
             self._send(str(e).encode(), "text/plain", 400)
+
+    def do_POST(self):
+        if urlparse(self.path).path == "/api/cm/reset":   # "Start over" button under the live confusion matrix
+            self.state.reset_confusion()
+            self._json({"ok": True})
+        else:
+            self._send(b"not found", "text/plain", 404)
 
     def _predict(self, q):
         line = ",".join(f"{k}={q[k][0]}" for k in ("N", "P", "K", "T", "H", "PH", "R") if k in q)

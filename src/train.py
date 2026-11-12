@@ -8,6 +8,7 @@ OUTPUT: models/crop_model.onnx   the deployed model (raw 7 numbers in -> crop pr
         models/crop_model.json   crop names, input ranges, scores
         models/crop_mlp.pth      the small PyTorch network
         results/report.md        comparison table;  metrics.json;  confusion_matrix.png
+        results/confusion_matrices.json   every model's confusion matrix (clean / good / cheap sensors), shown in the dashboard
 
 Method (kept deliberately simple):
   1. One fixed split: 1760 rows to train/tune, 440 rows locked away as the final exam.
@@ -114,6 +115,16 @@ def cv_eval(factory, aug):
 NOISY_TEST = {p: [add_sensor_noise(Xte, p, np.random.default_rng(5000 + d)) for d in range(20)] for p in ("good", "cheap")}
 
 
+def confusion(y_true, y_pred):
+    """22 x 22 counts: row = true crop, column = predicted crop."""
+    cm = np.zeros((len(classes), len(classes)), dtype=int)
+    np.add.at(cm, (y_true, y_pred), 1)
+    return cm.tolist()
+
+
+CONFUSION = []   # one entry per (model, noise-aware) -> results/confusion_matrices.json
+
+
 def final_eval(m):
     s = scores(m, Xte)
     top3 = float(np.mean([yte[i] in np.argsort(-s[i])[:3] for i in range(len(yte))]))
@@ -139,6 +150,8 @@ for name, make in factories().items():
                  **final_eval(m))
         rows.append(r)
         fitted[(name, aug)] = m
+        CONFUSION.append({"model": name, "noise_aware": aug, "clean": confusion(yte, m.predict(Xte)),   # noisy = all 20 copies added up
+                          **{p: confusion(np.tile(yte, len(c)), m.predict(np.vstack(c))) for p, c in NOISY_TEST.items()}})
         print(f"{name:<11} {'noise-aware' if aug else 'plain      '} cv {cv_mean:.4f}+-{cv_std:.4f} | cv@noise {cv_noisy:.4f} | "
               f"TEST clean {r['test_acc']:.4f} good {r['acc_good_noise']:.4f} cheap {r['acc_cheap_noise']:.4f} | "
               f"fit {fit_s:.1f}s ({time.time() - t0:.0f}s incl. cv)")
@@ -216,6 +229,9 @@ lo, hi = X.min(0), X.max(0)
     "features": FEATURES, "classes": classes, "onnx_input_name": sess.get_inputs()[0].name,
     "input_min": [float(v) for v in lo], "input_max": [float(v) for v in hi],
     "scores": best, "scores_without_rainfall": no_rain, "onnx_agreement": agree}, indent=2))
+(RES / "confusion_matrices.json").write_text(json.dumps({
+    "classes": classes, "test_rows": int(len(yte)), "noisy_copies": len(NOISY_TEST["good"]),
+    "deployed": {"model": best["model"], "noise_aware": best["noise_aware"]}, "matrices": CONFUSION}))
 (RES / "metrics.json").write_text(json.dumps({"rows": rows, "deployed": best, "svm_params": {k: str(v) for k, v in svm_params.items()},
                                               "without_rainfall": no_rain, "device": DEVICE}, indent=2))
 
