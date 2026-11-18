@@ -29,7 +29,7 @@ Other things to run (Windows: `START_HERE_windows.bat <step>`, Linux/macOS: `./s
 | `dashboard` | **dashboard in your web browser** with 3 tabs: *Live*, *Data* (browse the 2,200 training rows) and *Playground* (change N, K ... with sliders). Fake sensor by default; opens `http://127.0.0.1:8050` | until you press Ctrl+C |
 | `train` | trains 6 model types x 2 ways, compares them, saves the best | ~1 min |
 | `bench` | speed test of the saved model | 5 s |
-| `test` | 19 automatic checks of the whole pipeline | < 1 min |
+| `test` | 20 automatic checks of the whole pipeline | < 1 min |
 | `all` | check + train + bench + test | ~2 min |
 | `data` | download the optional extra datasets | seconds |
 
@@ -51,7 +51,7 @@ annu_ml_cpu/
 │  ├─ dashboard.py          web server for the dashboard (reads the same sensor lines, keeps the latest state)
 │  ├─ dashboard.html        the dashboard page itself (look and layout; edit it and refresh the browser)
 │  ├─ check_env.py          "is the installation healthy?"
-│  └─ selftest.py           19 end-to-end checks
+│  └─ selftest.py           20 end-to-end checks
 ├─ sim/sensor_sim.py        fake ESP32: produces realistic sensor lines and sends them
 ├─ datasets/                data (+ fetch_datasets.py, manifest.json = sources, licenses, checksums; DATASETS.md = index)
 ├─ models/                  the trained model (made by `train`, already included)
@@ -95,6 +95,9 @@ annu_ml_cpu/
   (`http://<laptop-ip>:8050`). Light or dark follows your computer; force one with `?theme=light` / `?theme=dark` on the address.
   **Data tab** = the training file as a table (filter by crop, page through it, each row shown as the text line a sensor would send).
   **Playground tab** = sliders and number boxes for all 7 inputs; raise N and K and the recommendation changes at once, with a list of what you changed.
+  Under the sliders is a **confusion matrix with your changes**: the model is re-tested on the 440 held-out rows with your changes (current value minus the starting value) added to every row,
+  so you see how a sensor that reads too high or too low would hurt it (e.g. N +60 and K +150 on every row drops 99.1 % to about 9 %). The outlined cell is your single reading;
+  untick *Apply my changes to every test row* to see the normal matrix again.
   **Live confusion matrix** (Live tab) = fills up reading by reading: row = the crop the demo sensor is really simulating, column = the model's answer
   (blue diagonal = right, orange = mistakes, outlined cell = latest reading). Switch *Each reading* / *Smoothed*, *Start over* resets it.
   It needs the true crop, so it only fills with the demo sensor (a real sensor does not know the answer).
@@ -137,6 +140,6 @@ typical conditions match; it knows nothing about price, season, or local soil ru
 
 * Data: Atharva Ingle, *Crop Recommendation Dataset* (Kaggle; a CC BY 4.0 copy exists on Figshare). Other datasets
   and their licenses: `datasets/DATASETS.md`.
-* Tested on Ubuntu 22.04 / Python 3.10 from a fresh copy of this folder (launcher -> environment build -> train -> bench -> 19/19 self-tests).
+* Tested on Ubuntu 22.04 / Python 3.10 from a fresh copy of this folder (launcher -> environment build -> train -> bench -> 20/20 self-tests).
   **Not run on Windows yet**: the launcher and code are Windows-aware, and every pinned library, plus PyTorch CPU, has a Windows wheel
   for Python 3.10 - 3.13 (checked on PyPI / the PyTorch index), but you are the first to run it there - if something fails, send the message printed in the window.

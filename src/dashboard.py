@@ -8,13 +8,15 @@ INPUT : the same text lines as live_predict.py   N=90,P=42,K=43,T=21.5,H=80.1,PH
 OUTPUT: a web page at http://127.0.0.1:8050 that refreshes every second (dashboard.html). Nothing is stored.
         Tabs:  Live (what the sensors say now, incl. the raw text lines, and a confusion matrix that fills up reading by reading)
                |  Models (every trained model: results table + confusion matrix, from results/*.json written by `train`)
-               |  Data (browse the 2200 training rows)  |  Playground (move sliders for N, P, K ... and watch the recommendation change)
+               |  Data (browse the 2200 training rows)  |  Playground (move sliders for N, P, K ... and watch the recommendation change,
+               and a confusion matrix that re-tests the model with your changes added to every test row)
         The live confusion matrix needs the true crop, which only the demo sensor knows (real sensors: Models tab only).
         Open it from a phone on the same Wi-Fi with  --host 0.0.0.0  and  http://<laptop-ip>:8050
 """
 import argparse
 import collections
 import json
+import math
 import random
 import threading
 import time
@@ -25,7 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
-from common import FEATURES, load_data
+from common import FEATURES, load_data, split_data
 from live_predict import PHYSICAL, LivePredictor, line_source
 from sensor_sim import format_line   # (live_predict has put the sim/ folder on the path)
 
@@ -51,6 +53,8 @@ class Dataset:
 
     def __init__(self):
         self.X, self.y, self.classes = load_data()
+        _, self.Xte, _, self.yte = split_data(self.X, self.y)   # the 440 rows the model never trained on
+        self._base = None
 
     def row(self, i):
         return {"row": int(i) + 1, "values": [round(float(v), 4) for v in self.X[i]],
@@ -71,6 +75,20 @@ class Dataset:
 
     def sample(self, crop):
         return self.row(random.choice(self.indices(crop)))
+
+    def confusion(self, pred, deltas, lo, hi):
+        """Confusion matrix (row = true crop, column = model answer) on the 440 test rows after adding `deltas` to every row.
+        Values are kept inside the accepted range lo..hi, like a real reading would be."""
+        X = np.clip(self.Xte + np.asarray(deltas, dtype=np.float32), lo, hi).astype(np.float32)
+        labels = pred.sess.run(None, {pred.in_name: X})[0].astype(int)
+        m = np.zeros((len(self.classes), len(self.classes)), dtype=int)
+        np.add.at(m, (self.yte, labels), 1)
+        return m
+
+    def baseline(self, pred, lo, hi):
+        if self._base is None:
+            self._base = self.confusion(pred, np.zeros(7), lo, hi)
+        return self._base
 
 
 class State:
@@ -160,6 +178,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(self.data.sample(q.get("crop", [""])[0]))
             elif u.path == "/api/predict":      # "what if": answer for the values in the address, without touching the live smoothing
                 self._json(self._predict(q))
+            elif u.path == "/api/confusion":    # Playground: the matrix after adding dN, dP, dK ... to every test row
+                self._json(self._confusion(q))
             elif u.path == "/api/models":       # Models tab: every trained model's scores + confusion matrices
                 self._json(model_results())
             else:
@@ -183,6 +203,19 @@ class Handler(BaseHTTPRequestHandler):
         classes = self.state.pred.classes
         return {"ok": True, "line": format_line(r["x"]), "values": [float(v) for v in r["x"]], "note": r["note"], "ms": r["ms"],
                 "top": [{"crop": classes[int(i)], "p": float(r["p"][i])} for i in order]}
+
+    def _confusion(self, q):
+        deltas = []
+        for k in ("N", "P", "K", "T", "H", "PH", "R"):
+            v = float(q.get("d" + k, ["0"])[0])
+            if not math.isfinite(v):
+                raise ValueError("every change must be a number")
+            deltas.append(v)
+        pred, st = self.state.pred, self.state.d
+        lo, hi = np.array(st["limit_lo"], dtype=np.float32), np.array(st["limit_hi"], dtype=np.float32)
+        m, base = self.data.confusion(pred, deltas, lo, hi), self.data.baseline(pred, lo, hi)
+        return {"classes": pred.classes, "matrix": m.tolist(), "n": int(m.sum()), "deltas": deltas,
+                "accuracy": float(np.trace(m) / m.sum()), "baseline_accuracy": float(np.trace(base) / base.sum())}
 
     def _json(self, obj):
         self._send(json.dumps(obj).encode(), "application/json")

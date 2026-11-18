@@ -249,6 +249,11 @@ and page through its rows. Each row also shows the **text line** a sensor would 
 * start from the **latest sensor reading**, from a **random dataset example** (optionally of one crop you choose), or from a row sent over with *Try*; *Reset* returns to that start;
 * the right-hand side shows the recommended crop, the best 5, the **list of what you changed** (e.g. `Nitrogen (N): 89 -> 140`), whether the **recommendation changed** (e.g. `Rice (55%) -> Apple (100%)`) and the text line for the current values (with a *Copy* button);
 * the Playground never touches the Live tab: it asks the model separately and does not use the smoothing.
+* **Confusion matrix with your changes** (below the sliders). A confusion matrix shows, for every true crop (rows), which crop the model answered (columns): the blue diagonal is right answers, orange cells are mistakes.
+  Here it is computed on the **440 test rows the model never trained on** (20 per crop), and *your changes are added to every one of them*: whatever you moved (current value minus the start value, e.g. Nitrogen +51)
+  is added to that input in all 440 rows (kept inside the accepted range), the model answers them all again, and the matrix is redrawn. With no changes it is the normal matrix (99.1 % right, the same as `results/confusion_matrix.png`);
+  a sensor that reads 60 too high on N and 150 too high on K sends almost every crop to "Grapes" and accuracy collapses to about 9 %. The **outlined cell** is your single reading (its true crop, when you started from a dataset example, against what the model says now).
+  The *Most common mistakes* list is the same information as text. Tick/untick *Apply my changes to every test row* to switch between the changed and the normal matrix.
 
 How it works: `dashboard.py` starts one background thread that reads lines and passes each one to the **same** `LivePredictor` class that `live_predict.py` uses (so parsing, checking, smoothing and the model are identical),
 and keeps the latest results in memory. A tiny web server (Python standard library only - no extra packages) serves `dashboard.html` and a few JSON pages that the page asks for:
@@ -259,6 +264,7 @@ and keeps the latest results in memory. A tiny web server (Python standard libra
 | `/api/dataset?crop=rice&page=0&size=20` | one page of training rows + the crop's summary |
 | `/api/sample?crop=rice` | one random real row |
 | `/api/predict?N=90&P=42&K=43&T=20.9&H=82&PH=6.5&R=202.9` | the answer for exactly these values (a bad value comes back as `ok: false` with the reason) |
+| `/api/confusion?dN=51&dK=164` | the 22 x 22 confusion matrix on the 440 test rows after adding these changes (`dN dP dK dT dH dPH dR`, all optional) to every row, plus its accuracy and the unchanged accuracy |
 
 To change the look, edit `dashboard.html` and refresh the browser.
 

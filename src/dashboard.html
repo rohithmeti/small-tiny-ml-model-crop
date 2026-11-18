@@ -143,6 +143,8 @@ td.mono, th.mono { font-size: .78rem; text-align: left; }
 .line-box code { flex: 1; min-width: 0; font-size: .8rem; word-break: break-all; }
 .changes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: .88rem; }
 .changes li::before { content: "\2022  "; color: var(--accent); }
+.check { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
 .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
 table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
 th { font-weight: 500; color: var(--ink-2); text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
@@ -416,6 +418,40 @@ footer { margin-top: 18px; text-align: center; }
       <ul id="pg-changes" class="changes"></ul>
       <div class="line-box"><code id="pg-line" class="mono"></code><button class="btn small" id="pg-copy">Copy</button></div>
       <p id="pg-note" class="small" hidden></p>
+    </article>
+  </section>
+
+  <section class="stack" style="margin-top:16px">
+    <article class="card" id="pg-cm-card">
+      <div class="controls" style="margin:0 0 4px">
+        <h3>Confusion matrix with your changes</h3><span class="spacer"></span>
+        <label class="small check"><input type="checkbox" id="pg-apply" checked> Apply my changes to every test row</label>
+      </div>
+      <p class="small">The model is tested on 440 rows it never learned from (20 per crop). Row = the true crop, column = what the model answered, so the blue diagonal is right answers and orange cells are mistakes.
+        Your changes (the current value minus the starting value) are added to <b>every</b> one of those rows, so you can see what a sensor that reads too high or too low would do to the model.</p>
+      <p id="pg-cm-applied" class="small" style="margin-top:8px"></p>
+      <div class="kvs four">
+        <div><div class="kv-val" id="pg-cm-n">--</div><p class="small">Test rows</p></div>
+        <div><div class="kv-val" id="pg-cm-acc">--</div><p class="small">Right now</p></div>
+        <div><div class="kv-val" id="pg-cm-base">--</div><p class="small">Right with no changes</p></div>
+        <div><div class="kv-val" id="pg-cm-wrong">--</div><p class="small">Wrong now</p></div>
+      </div>
+      <div class="cm-layout">
+        <div style="min-width:0">
+          <div class="cm-axes"><span>Rows: true crop</span><span>Columns: model answer &middot; last column: right / total for that crop</span></div>
+          <div class="cm-wrap"><div id="pg-cm" class="cm" role="img"></div></div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--accent) 12%,var(--surface)),var(--accent))"></i>right answer (darker = larger share of that crop)</span>
+            <span><i class="swatch" style="background:linear-gradient(90deg,color-mix(in oklab,var(--miss) 40%,var(--surface)),var(--miss))"></i>mistake</span>
+            <span id="pg-cm-mark"><i class="swatch" style="outline:2px solid var(--ink);outline-offset:1px;background:transparent"></i>your single reading (true crop and what the model said)</span>
+          </div>
+          <p id="pg-cm-hint" class="small" hidden>Start from a dataset example (the <b>Try</b> button on the Data tab, or <b>Random dataset example</b>) to see where your single reading lands on the matrix.</p>
+        </div>
+        <div>
+          <h3>Most common mistakes</h3>
+          <ul id="pg-miss" class="miss-list"></ul>
+        </div>
+      </div>
     </article>
   </section>
 </div>
@@ -841,7 +877,7 @@ function dsRender(d) {
     const tr = h("tr"); tr.append(h("td", "l", String(r.row)));
     r.values.forEach((v, i) => tr.append(h("td", null, fmt(v, SENSORS[i].dec))));
     const go = h("button", "btn small", "Try"); go.title = "Load this row into the Playground";
-    go.addEventListener("click", () => { pgLoad(r.values, "dataset row " + r.row + " (" + nice(r.crop) + ")"); showTab("playground"); });
+    go.addEventListener("click", () => { pgLoad(r.values, "dataset row " + r.row + " (" + nice(r.crop) + ")", r.crop); showTab("playground"); });
     const act = h("td"); act.append(go);
     tr.append(h("td", "l", nice(r.crop)), h("td", "mono", r.line), act); body.append(tr);
   });
@@ -854,7 +890,7 @@ $("ds-prev").addEventListener("click", () => { ds.page = Math.max(0, ds.page - 1
 $("ds-next").addEventListener("click", () => { ds.page += 1; dsLoad(); });
 
 /* ---------- Playground: change values, watch the answer ---------- */
-const pg = {rows: [], values: null, base: null, baseRes: null, wantBase: false, seq: 0, timer: null, bars: null, built: false};
+const pg = {rows: [], values: null, base: null, baseRes: null, wantBase: false, seq: 0, timer: null, bars: null, built: false, cm: null, cmData: null, cmSeq: 0, trueCrop: null, lastPred: null};
 const QUERY_KEYS = ["N", "P", "K", "T", "H", "PH", "R"];
 
 function pgBuild(s) {
@@ -881,12 +917,13 @@ function pgBuild(s) {
     pg.rows.push(r);
   });
   pg.bars = makeBars($("pg-bars"), 5);
+  pg.cm = makeCM($("pg-cm"), s.classes, false);
   pg.built = true;
 }
 function pgApply(values) { pg.rows.forEach((r, i) => r.set(values[i])); pgSchedule(); }
-function pgLoad(values, from) {          // start a new experiment from these values
+function pgLoad(values, from, trueCrop) {          // start a new experiment from these values (trueCrop = the real crop, if known)
   if (!pg.built) pgBuild(lastState);
-  pg.base = values.slice(); pg.baseRes = null; pg.wantBase = true;
+  pg.base = values.slice(); pg.baseRes = null; pg.wantBase = true; pg.trueCrop = trueCrop || null;
   $("pg-from").textContent = "Started from: " + from + ". Everything below is compared with that start.";
   pgApply(values);
 }
@@ -899,7 +936,7 @@ async function pgRandom() {
   try {
     const r = await fetch("/api/sample?crop=" + encodeURIComponent($("pg-crop").value), {cache: "no-store"});
     const row = await r.json();
-    pgLoad(row.values, "dataset row " + row.row + " (" + nice(row.crop) + ")");
+    pgLoad(row.values, "dataset row " + row.row + " (" + nice(row.crop) + ")", row.crop);
   } catch (e) { $("pg-from").textContent = "Could not get an example from the laptop program."; }
 }
 function pgSchedule() { clearTimeout(pg.timer); pg.timer = setTimeout(pgPredict, 120); }
@@ -909,13 +946,13 @@ async function pgPredict() {
     const r = await fetch("/api/predict?" + q, {cache: "no-store"}), res = await r.json();
     if (my !== pg.seq) return;           // a newer slider move is already on its way
     if (pg.wantBase && res.ok) { pg.baseRes = res; pg.wantBase = false; }
-    pgShow(res);
+    pgShow(res); pgConfusion();
   } catch (e) { /* the status pill already tells when the program is gone */ }
 }
 function pgShow(res) {
   const note = $("pg-note");
   if (!res.ok) { $("pg-name").textContent = "Not accepted"; $("pg-line").textContent = res.problem; note.hidden = true; return; }
-  const top = res.top, best = top[0];
+  const top = res.top, best = top[0]; pg.lastPred = best.crop;
   $("pg-name").textContent = nice(best.crop); $("pg-emoji").textContent = EMOJI[best.crop] || "\u{1F331}";
   $("pg-conf").textContent = pct(best.p); $("pg-fill").style.width = Math.round(best.p * 100) + "%"; $("pg-meter").setAttribute("aria-valuenow", Math.round(best.p * 100));
   fillBars(pg.bars, top);
@@ -932,11 +969,47 @@ function pgShow(res) {
   $("pg-rec").textContent = !b ? "" : (b.crop === best.crop
     ? "Recommendation unchanged: " + nice(best.crop) + " (" + pct(b.p) + " → " + pct(best.p) + ")"
     : "Recommendation changed: " + nice(b.crop) + " (" + pct(b.p) + ") → " + nice(best.crop) + " (" + pct(best.p) + ")");
+  pgCmShow();
 }
+
+/* the Playground's confusion matrix: the 440 test rows, with your changes added to every one of them (the server re-tests the model) */
+async function pgConfusion() {
+  if (!pg.base) return;
+  const my = ++pg.cmSeq, apply = $("pg-apply").checked;
+  const q = QUERY_KEYS.map((k, i) => "d" + k + "=" + (apply ? pg.values[i] - pg.base[i] : 0)).join("&");
+  try {
+    const r = await fetch("/api/confusion?" + q, {cache: "no-store"}), d = await r.json();
+    if (my !== pg.cmSeq) return;         // a newer slider move is already on its way
+    pg.cmData = d; pgCmShow();
+  } catch (e) { /* the status pill already tells when the program is gone */ }
+}
+function pgCmShow() {
+  const d = pg.cmData; if (!d || !pg.cm) return;
+  const t = pg.trueCrop ? d.classes.indexOf(pg.trueCrop) : -1, a = pg.lastPred ? d.classes.indexOf(pg.lastPred) : -1;
+  const mark = t >= 0 && a >= 0 ? {t, a} : null;
+  const {right, total} = pg.cm.update(d.matrix, mark);
+  $("pg-cm-n").textContent = total.toLocaleString();
+  $("pg-cm-acc").textContent = (100 * right / total).toFixed(1) + "%";
+  $("pg-cm-base").textContent = (100 * d.baseline_accuracy).toFixed(1) + "%";
+  $("pg-cm-wrong").textContent = (total - right).toLocaleString();
+  const parts = [];
+  SENSORS.forEach((s, i) => {
+    const dv = pg.values[i] - pg.base[i];
+    if (Math.abs(dv) > 1e-9) parts.push(s.label + " " + (dv > 0 ? "+" : "\u2212") + fmt(Math.abs(dv), s.dec) + (s.unit ? " " + s.unit : ""));
+  });
+  $("pg-cm-applied").textContent = !$("pg-apply").checked
+    ? "Changes are NOT applied to the test rows, so this is the normal matrix of the trained model."
+    : parts.length ? "Added to every test row: " + parts.join(", ") + " (values are kept inside the accepted range)."
+                   : "No changes yet, so this is the normal matrix of the trained model. Move a slider to see it change.";
+  fillMistakes($("pg-miss"), mistakes(d.matrix, d.classes, 6), d.classes, "row", "No mistakes at all.");
+  $("pg-cm-mark").style.display = mark ? "" : "none";
+  $("pg-cm-hint").hidden = !!mark;
+}
+$("pg-apply").addEventListener("change", pgConfusion);
 $("pg-random").addEventListener("click", pgRandom);
 $("pg-reset").addEventListener("click", () => { if (pg.base) { pgApply(pg.base); } });
 $("pg-sensor").addEventListener("click", () => {
-  if (lastState && lastState.latest) pgLoad(lastState.latest.values, "the latest sensor reading");
+  if (lastState && lastState.latest) pgLoad(lastState.latest.values, "the latest sensor reading", lastState.latest.truth || null);
   else $("pg-from").textContent = "No sensor reading has arrived yet.";
 });
 $("pg-copy").addEventListener("click", async () => {

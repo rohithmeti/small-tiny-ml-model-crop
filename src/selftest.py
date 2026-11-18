@@ -120,10 +120,17 @@ try:
     more["a"] = get("/api/predict?N=90&P=42&K=43&T=20.9&H=82&PH=6.5&R=202.9")
     more["b"] = get("/api/predict?N=140&P=42&K=140&T=20.9&H=82&PH=6.5&R=202.9")
     more["bad"] = get("/api/predict?N=90&P=42&K=43&T=20.9&H=150&PH=6.5&R=202.9")
+    more["cm0"] = get("/api/confusion")
+    more["cm1"] = get("/api/confusion?dN=60&dK=150")
 finally:
     dash.terminate()
 check("dashboard serves the page and live readings", bool(state) and state["used"] >= 4 and "Crop advisor" in page and "const INITIAL = {" in page,
       f"{state['used']} readings, latest crop {state['latest']['crop']}" if state and state.get("latest") else "no data")
+meta_acc = json.loads((find_model_dir() / "crop_model.json").read_text())["scores"]["test_acc"]
+check("playground confusion matrix: normal matrix = trained model's score; a big N,K shift is visible",
+      bool(more) and more["cm0"]["n"] == 440 and abs(more["cm0"]["accuracy"] - meta_acc) < 1e-6
+      and sum(map(sum, more["cm1"]["matrix"])) == 440 and more["cm1"]["accuracy"] < more["cm0"]["accuracy"] - 0.3,
+      f"{more['cm0']['accuracy']:.1%} -> {more['cm1']['accuracy']:.1%} after adding N +60, K +150 to every test row" if more else "no data")
 check("dashboard data tab + playground: dataset rows, what-if answers, bad value refused",
       bool(more) and more["rows"]["total"] == 100 and len(more["rows"]["rows"]) == 5 and more["rows"]["rows"][0]["line"].startswith("N=")
       and more["a"]["ok"] and more["b"]["ok"] and more["a"]["top"] != more["b"]["top"] and more["bad"]["ok"] is False,
